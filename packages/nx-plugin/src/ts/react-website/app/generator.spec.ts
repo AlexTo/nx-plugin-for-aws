@@ -23,6 +23,12 @@ describe('react-website generator', () => {
     iacProvider: 'CDK',
   };
 
+  const shadcnOptions: TsReactWebsiteGeneratorSchema = {
+    name: 'test-app',
+    iacProvider: 'CDK',
+    uiProvider: 'shadcn',
+  };
+
   const optionsWithoutTailwind: TsReactWebsiteGeneratorSchema = {
     name: 'test-app',
     enableTailwind: false,
@@ -130,6 +136,31 @@ describe('react-website generator', () => {
       constructs: expect.any(String),
       'aws-cdk-lib': expect.any(String),
     });
+  });
+
+  it('should generate shadcn UI variant without cloudscape dependencies', async () => {
+    await tsReactWebsiteGenerator(tree, shadcnOptions);
+    const packageJson = JSON.parse(tree.read('package.json').toString());
+    expect(packageJson.dependencies).not.toHaveProperty(
+      '@cloudscape-design/components',
+    );
+    expect(tree.exists('test-app/src/main.tsx')).toBeTruthy();
+    expect(tree.exists('test-app/src/components/AppLayout/index.tsx')).toBe(
+      true,
+    );
+    // With TanStack Router enabled by default, routes drive the UI instead of app.tsx
+    const routeContent = tree.read('test-app/src/routes/index.tsx', 'utf-8');
+    expect(routeContent).toBeDefined();
+    expect(routeContent).toContain('Start building your routes');
+  });
+
+  it('should require tailwind when using shadcn UI', async () => {
+    await expect(
+      tsReactWebsiteGenerator(tree, {
+        ...shadcnOptions,
+        enableTailwind: false,
+      }),
+    ).rejects.toThrow('Shadcn UI requires TailwindCSS');
   });
 
   it('should configure TypeScript correctly', async () => {

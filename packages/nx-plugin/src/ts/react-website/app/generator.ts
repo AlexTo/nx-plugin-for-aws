@@ -45,6 +45,7 @@ import {
 import { addGeneratorMetricsIfApplicable } from '../../../utils/metrics';
 import { addWebsiteInfra } from '../../../utils/website-constructs/website-constructs';
 import { resolveIacProvider } from '../../../utils/iac';
+import { resolveUiProvider } from '../../../utils/ui';
 
 export const REACT_WEBSITE_APP_GENERATOR_INFO: NxGeneratorInfo =
   getGeneratorInfo(__filename);
@@ -53,7 +54,16 @@ export async function tsReactWebsiteGenerator(
   tree: Tree,
   schema: TsReactWebsiteGeneratorSchema,
 ) {
+  const uiProvider = await resolveUiProvider(
+    tree,
+    schema.uiProvider ?? 'cloudscape',
+  );
   const enableTailwind = schema.enableTailwind ?? true;
+  if (uiProvider === 'shadcn' && !enableTailwind) {
+    throw new Error(
+      'Shadcn UI requires TailwindCSS. Remove enableTailwind=false or choose uiProvider=cloudscape.',
+    );
+  }
   const enableTanstackRouter = schema.enableTanstackRouter ?? true;
   const npmScopePrefix = getNpmScopePrefix(tree);
   const websiteNameClassName = toClassName(schema.name);
@@ -194,9 +204,14 @@ export async function tsReactWebsiteGenerator(
   const projectConfig = readProjectConfiguration(tree, fullyQualifiedName);
   const libraryRoot = projectConfig.root;
   tree.delete(joinPathFragments(libraryRoot, 'src', 'app'));
+  const appTemplateRoot = joinPathFragments(
+    __dirname,
+    `./files/app-${uiProvider}`,
+  );
+
   generateFiles(
     tree, // the virtual file system
-    joinPathFragments(__dirname, './files/app'), // path to the file templates
+    appTemplateRoot, // path to the file templates
     libraryRoot, // destination path of the files
     {
       ...schema,
@@ -204,6 +219,7 @@ export async function tsReactWebsiteGenerator(
       pkgMgrCmd: getPackageManagerCommand().exec,
       enableTailwind,
       enableTanstackRouter,
+      uiProvider,
     }, // config object to replace variable in file templates
     {
       overwriteStrategy: OverwriteStrategy.Overwrite,
@@ -211,9 +227,13 @@ export async function tsReactWebsiteGenerator(
   );
 
   if (enableTanstackRouter) {
+    const tanstackTemplateRoot = joinPathFragments(
+      __dirname,
+      `./files/tanstack-router-${uiProvider}`,
+    );
     generateFiles(
       tree, // the virtual file system
-      joinPathFragments(__dirname, './files/tanstack-router'), // path to the file templates
+      tanstackTemplateRoot, // path to the file templates
       libraryRoot, // destination path of the files
       {
         ...schema,
@@ -221,6 +241,7 @@ export async function tsReactWebsiteGenerator(
         pkgMgrCmd: getPackageManagerCommand().exec,
         enableTailwind,
         enableTanstackRouter,
+        uiProvider,
       }, // config object to replace variable in file templates
       {
         overwriteStrategy: OverwriteStrategy.Overwrite,
@@ -442,13 +463,15 @@ export async function tsReactWebsiteGenerator(
 
   const devDependencies: ITsDepVersion[] = ['vite-tsconfig-paths', '@nx/react'];
 
-  const dependencies: ITsDepVersion[] = [
-    '@cloudscape-design/components',
-    '@cloudscape-design/board-components',
-    '@cloudscape-design/global-styles',
-    'react',
-    'react-dom',
-  ];
+  const dependencies: ITsDepVersion[] = ['react', 'react-dom'];
+
+  if (uiProvider === 'cloudscape') {
+    dependencies.push(
+      '@cloudscape-design/components',
+      '@cloudscape-design/board-components',
+      '@cloudscape-design/global-styles',
+    );
+  }
 
   // Add TailwindCSS dependencies if enabled
   if (enableTailwind) {

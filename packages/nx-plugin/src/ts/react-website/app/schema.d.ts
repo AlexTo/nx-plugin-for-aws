@@ -4,6 +4,7 @@
  */
 import { SupportedStyles } from '@nx/react';
 import { IacProviderOption } from '../../../utils/iac';
+import { UiProviderOption } from '../../../utils/ui';
 
 export interface TsReactWebsiteGeneratorSchema {
   name: string;
@@ -12,4 +13,5 @@ export interface TsReactWebsiteGeneratorSchema {
   enableTanstackRouter?: boolean;
   enableTailwind?: boolean;
   iacProvider: IacProviderOption;
+  uiProvider?: UiProviderOption;
 }

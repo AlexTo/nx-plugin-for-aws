@@ -1,0 +1,42 @@
+import AppLayout from './components/AppLayout';
+
+const FeatureCard: React.FC<React.PropsWithChildren<{ title: string; eyebrow?: string }>> = ({
+  title,
+  eyebrow,
+  children,
+}) => (
+  <div className="rounded-xl border border-slate-800/70 bg-slate-900/40 p-6 shadow-lg shadow-slate-950/30">
+    <div className="space-y-1">
+      {eyebrow ? (
+        <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{eyebrow}</p>
+      ) : null}
+      <h2 className="text-xl font-semibold text-slate-50">{title}</h2>
+    </div>
+    <div className="mt-3 text-slate-200">{children}</div>
+  </div>
+);
+
+export const App = () => (
+  <AppLayout>
+    <div className="space-y-8">
+      <div className="space-y-4">
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Shadcn UI starter</p>
+        <h1 className="text-4xl font-semibold text-slate-50">
+          Welcome to your new React website
+        </h1>
+        <p className="max-w-2xl text-lg text-slate-200">
+          TailwindCSS-powered shell with a simple layout so you can drop in your favorite Shadcn UI components.
+        </p>
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        <FeatureCard title="Routing" eyebrow="<% if (enableTanstackRouter) { %>TanStack Router<% } else { %>No router<% } %>">
+          <% if (enableTanstackRouter) { %>File-based routing is wired with TanStack Router. Add routes in <code className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-100">src/routes</code> and generate the route tree.<% } else { %>Bring your own router or keep the footprint small—this starter keeps things minimal.<% } %>
+        </FeatureCard>
+        <FeatureCard title="Styling" eyebrow="TailwindCSS 4">
+          Preconfigured for TailwindCSS with a dark, neutral palette. Swap in Shadcn UI components or extend the design tokens.
+        </FeatureCard>
+      </div>
+    </div>
+  </AppLayout>
+);
