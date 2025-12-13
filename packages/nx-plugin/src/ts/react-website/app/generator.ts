@@ -20,6 +20,7 @@ import {
   ObjectLiteralExpression,
   isPropertyAssignment,
   ArrayLiteralExpression,
+  SyntaxKind,
 } from 'typescript';
 import { TsReactWebsiteGeneratorSchema } from './schema';
 import { applicationGenerator } from '@nx/react';
@@ -46,7 +47,7 @@ import { addGeneratorMetricsIfApplicable } from '../../../utils/metrics';
 import { addWebsiteInfra } from '../../../utils/website-constructs/website-constructs';
 import { resolveIacProvider } from '../../../utils/iac';
 
-export const SUPPORTED_UX_PROVIDERS = ['None', 'Cloudscape'] as const;
+export const SUPPORTED_UX_PROVIDERS = ['None', 'Cloudscape', 'Shadcn'] as const;
 
 export type UxProvider = (typeof SUPPORTED_UX_PROVIDERS)[number];
 
@@ -60,6 +61,12 @@ export async function tsReactWebsiteGenerator(
   const enableTailwind = schema.enableTailwind ?? true;
   const enableTanstackRouter = schema.enableTanstackRouter ?? true;
   const uxProvider: UxProvider = schema.uxProvider ?? 'Cloudscape';
+
+  if (uxProvider === 'Shadcn' && !enableTailwind) {
+    throw new Error(
+      'The Shadcn UX provider requires TailwindCSS. Please enable TailwindCSS or choose a different UX provider.',
+    );
+  }
   const npmScopePrefix = getNpmScopePrefix(tree);
   const websiteNameClassName = toClassName(schema.name);
   const websiteNameKebabCase = toKebabCase(schema.name);
@@ -502,13 +509,14 @@ export async function tsReactWebsiteGenerator(
 
   const dependencies: ITsDepVersion[] = ['react', 'react-dom'];
 
-  if (uxProvider === 'Cloudscape') {
-    dependencies.push(
-      '@cloudscape-design/components',
-      '@cloudscape-design/board-components',
-      '@cloudscape-design/global-styles',
-    );
-  }
+  applyUxProviderCustomizations({
+    tree,
+    uxProvider,
+    libraryRoot,
+    websiteContentPath,
+    viteConfigPath,
+    dependencies,
+  });
 
   // Add TailwindCSS dependencies if enabled
   if (enableTailwind) {
@@ -541,5 +549,221 @@ export async function tsReactWebsiteGenerator(
       installPackagesTask(tree);
     }
   };
+}
+
+type UxCustomizationContext = {
+  tree: Tree;
+  uxProvider: UxProvider;
+  libraryRoot: string;
+  websiteContentPath: string;
+  viteConfigPath: string;
+  dependencies: ITsDepVersion[];
+};
+
+function applyUxProviderCustomizations({
+  tree,
+  uxProvider,
+  libraryRoot,
+  websiteContentPath,
+  viteConfigPath,
+  dependencies,
+}: UxCustomizationContext) {
+  switch (uxProvider) {
+    case 'Shadcn':
+      return applyShadcnCustomizations(
+        tree,
+        websiteContentPath,
+        libraryRoot,
+        viteConfigPath,
+        dependencies,
+      );
+    case 'Cloudscape':
+      return applyCloudscapeCustomizations(dependencies);
+    case 'None':
+      return;
+    default: {
+      const exhaustiveCheck: never = uxProvider;
+      return exhaustiveCheck;
+    }
+  }
+}
+
+function applyCloudscapeCustomizations(dependencies: ITsDepVersion[]) {
+  dependencies.push(
+    '@cloudscape-design/components',
+    '@cloudscape-design/board-components',
+    '@cloudscape-design/global-styles',
+  );
+}
+
+function applyShadcnCustomizations(
+  tree: Tree,
+  websiteContentPath: string,
+  libraryRoot: string,
+  viteConfigPath: string,
+  dependencies: ITsDepVersion[],
+) {
+  dependencies.push(
+    'class-variance-authority',
+    'clsx',
+    'lucide-react',
+    'tw-animate-css',
+    'tailwind-merge',
+    '@radix-ui/react-dialog',
+    '@radix-ui/react-dropdown-menu',
+    '@radix-ui/react-separator',
+    '@radix-ui/react-slot',
+    '@radix-ui/react-tooltip',
+  );
+
+  addShadcnViteAlias(tree, viteConfigPath);
+  addShadcnTsConfigPaths(tree, websiteContentPath);
+  writeShadcnComponentsJson(tree, libraryRoot);
+}
+
+function addShadcnViteAlias(tree: Tree, viteConfigPath: string) {
+  if (!tree.exists(viteConfigPath)) {
+    return;
+  }
+
+  addDestructuredImport(
+    tree,
+    viteConfigPath,
+    ['fileURLToPath', 'URL'],
+    'node:url',
+  );
+
+  replaceIfExists(
+    tree,
+    viteConfigPath,
+    'ObjectLiteralExpression',
+    (node: ObjectLiteralExpression) => {
+      const properties = [...node.properties];
+      const resolveIndex = properties.findIndex(
+        (prop) =>
+          isPropertyAssignment(prop) && prop.name.getText() === 'resolve',
+      );
+
+      const atAliasProperty = factory.createPropertyAssignment(
+        factory.createStringLiteral('@'),
+        factory.createCallExpression(
+          factory.createIdentifier('fileURLToPath'),
+          undefined,
+          [
+            factory.createNewExpression(factory.createIdentifier('URL'), undefined, [
+              factory.createStringLiteral('./src'),
+              factory.createPropertyAccessExpression(
+                factory.createMetaProperty(
+                  SyntaxKind.ImportKeyword,
+                  factory.createIdentifier('meta'),
+                ),
+                factory.createIdentifier('url'),
+              ),
+            ]),
+          ],
+        ),
+      );
+
+      const aliasAssignment = factory.createPropertyAssignment(
+        'alias',
+        factory.createObjectLiteralExpression([atAliasProperty], true),
+      );
+
+      if (resolveIndex === -1) {
+        properties.push(
+          factory.createPropertyAssignment(
+            'resolve',
+            factory.createObjectLiteralExpression([aliasAssignment], true),
+          ),
+        );
+        return factory.createObjectLiteralExpression(properties, true);
+      }
+
+      const resolveProp = properties[resolveIndex] as any;
+      const resolveConfig = resolveProp.initializer as ObjectLiteralExpression;
+      const resolveProps = [...resolveConfig.properties];
+      const aliasIndex = resolveProps.findIndex(
+        (prop) =>
+          isPropertyAssignment(prop) && prop.name.getText() === 'alias',
+      );
+
+      if (aliasIndex === -1) {
+        resolveProps.push(aliasAssignment);
+      } else {
+        const aliasProp = resolveProps[aliasIndex] as any;
+        const aliasConfig = aliasProp.initializer as ObjectLiteralExpression;
+        const aliasProps = [...aliasConfig.properties];
+        const hasAtAlias = aliasProps.some(
+          (prop) =>
+            isPropertyAssignment(prop) &&
+            prop.name.getText().replace(/['"]/g, '') === '@',
+        );
+
+        if (!hasAtAlias) {
+          aliasProps.push(atAliasProperty);
+          resolveProps[aliasIndex] = factory.createPropertyAssignment(
+            'alias',
+            factory.createObjectLiteralExpression(aliasProps, true),
+          );
+        }
+      }
+
+      properties[resolveIndex] = factory.createPropertyAssignment(
+        'resolve',
+        factory.createObjectLiteralExpression(resolveProps, true),
+      );
+
+      return factory.createObjectLiteralExpression(properties, true);
+    },
+  );
+}
+
+function addShadcnTsConfigPaths(tree: Tree, websiteContentPath: string) {
+  updateJson(
+    tree,
+    joinPathFragments(websiteContentPath, 'tsconfig.app.json'),
+    (tsconfig) => ({
+      ...tsconfig,
+      compilerOptions: {
+        ...tsconfig.compilerOptions,
+        baseUrl: '.',
+        paths: {
+          ...(tsconfig.compilerOptions?.paths ?? {}),
+          '@/*': ['./src/*'],
+        },
+      },
+    }),
+  );
+}
+
+function writeShadcnComponentsJson(tree: Tree, libraryRoot: string) {
+  tree.write(
+    joinPathFragments(libraryRoot, 'components.json'),
+    JSON.stringify(
+      {
+        $schema: 'https://ui.shadcn.com/schema.json',
+        style: 'new-york',
+        rsc: false,
+        tsx: true,
+        tailwind: {
+          config: '',
+          css: 'src/styles.css',
+          baseColor: 'zinc',
+          cssVariables: true,
+          prefix: '',
+        },
+        aliases: {
+          components: '@/components',
+          utils: '@/lib/utils',
+          ui: '@/components/ui',
+          lib: '@/lib',
+          hooks: '@/hooks',
+        },
+        iconLibrary: 'lucide',
+      },
+      null,
+      2,
+    ),
+  );
 }
 export default tsReactWebsiteGenerator;

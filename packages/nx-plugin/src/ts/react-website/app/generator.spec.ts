@@ -655,6 +655,7 @@ describe('react-website generator', () => {
   });
 });
 
+// UX provider specific tests
 describe.each(SUPPORTED_UX_PROVIDERS.map((p) => [p]))(
   'react-website generator (uxProvider=%s)',
   (uxProvider) => {
@@ -672,34 +673,90 @@ describe.each(SUPPORTED_UX_PROVIDERS.map((p) => [p]))(
 
     it('should add uxProvider metadata', async () => {
       await tsReactWebsiteGenerator(tree, options);
-
       const projectConfig = JSON.parse(
         tree.read(`test-app/project.json`, 'utf-8'),
       );
-
       expect(projectConfig.metadata.uxProvider).toEqual(uxProvider);
     });
 
-    it('should update package.json with required dependencies', async () => {
-      await tsReactWebsiteGenerator(tree, options);
-
-      snapshotTreeDir(tree, 'test-app/src');
-
-      const packageJson = JSON.parse(tree.read('package.json').toString());
-      // Check for website dependencies
-
-      switch (uxProvider) {
-        case 'None':
-          break;
-        case 'Cloudscape':
+    switch (uxProvider) {
+      case 'None':
+        break;
+      case 'Cloudscape':
+        it('should update package.json with required dependencies', async () => {
+          await tsReactWebsiteGenerator(tree, options);
+          snapshotTreeDir(tree, 'test-app/src');
+          const packageJson = JSON.parse(tree.read('package.json').toString());
           expect(packageJson.dependencies).toMatchObject({
             '@cloudscape-design/components': expect.any(String),
             '@cloudscape-design/board-components': expect.any(String),
           });
-          break;
-        default:
-          throw new Error(`Unhandled uxProvider in test: ${uxProvider}`);
-      }
-    });
+        });
+        break;
+      case 'Shadcn':
+        it('should update package.json with required dependencies', async () => {
+          await tsReactWebsiteGenerator(tree, options);
+          snapshotTreeDir(tree, 'test-app/src');
+          const packageJson = JSON.parse(tree.read('package.json').toString());
+          expect(packageJson.dependencies).toMatchObject({
+            'class-variance-authority': expect.any(String),
+            clsx: expect.any(String),
+            'lucide-react': expect.any(String),
+            'tw-animate-css': expect.any(String),
+            'tailwind-merge': expect.any(String),
+            tailwindcss: expect.any(String),
+            '@radix-ui/react-dialog': expect.any(String),
+            '@radix-ui/react-dropdown-menu': expect.any(String),
+            '@radix-ui/react-separator': expect.any(String),
+            '@radix-ui/react-slot': expect.any(String),
+            '@radix-ui/react-tooltip': expect.any(String),
+          });
+          expect(packageJson.devDependencies).toMatchObject({
+            '@tailwindcss/vite': expect.any(String),
+          });
+        });
+
+        it('should generate components.json', async () => {
+          await tsReactWebsiteGenerator(tree, options);
+          snapshotTreeDir(tree, 'test-app/src');
+          expect(tree.exists('test-app/components.json')).toBeTruthy();
+          expect(
+            JSON.parse(tree.read('test-app/components.json')!.toString()),
+          ).toMatchObject({
+            aliases: {
+              components: '@/components',
+              ui: '@/components/ui',
+            },
+            iconLibrary: 'lucide',
+          });
+
+        });
+
+        it('should configure tsconfig paths', async () => {
+          await tsReactWebsiteGenerator(tree, options);
+          const tsConfig = JSON.parse(
+            tree.read('test-app/tsconfig.app.json').toString(),
+          );
+
+          expect(tsConfig.compilerOptions.baseUrl).toEqual('.');
+          expect(tsConfig.compilerOptions.paths).toMatchObject({
+            '@/*': ['./src/*'],
+          });
+        });
+
+        it('should add vite resolve alias', async () => {
+          await tsReactWebsiteGenerator(tree, options);
+          const viteConfig = tree.read('test-app/vite.config.mts')?.toString();
+
+          expect(viteConfig).toContain(
+            "'@': fileURLToPath(new URL('./src', import.meta.url))",
+          );
+          expect(viteConfig).toContain("from 'node:url'");
+        });
+
+        break;
+      default:
+        throw new Error(`Unhandled uxProvider in test: ${uxProvider}`);
+    }
   },
 );

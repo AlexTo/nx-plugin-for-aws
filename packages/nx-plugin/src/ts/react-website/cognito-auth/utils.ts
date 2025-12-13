@@ -195,6 +195,192 @@ export function addNoneAuthMenu(tree: Tree, appLayoutTsxPath: string) {
   );
 }
 
+// Adds a user greeting and sign-out button when using the Shadcn UX provider.
+export function addShadcnAuthMenu(tree: Tree, appLayoutTsxPath: string) {
+  function isActionsSlot(node: JsxElement): boolean {
+    const opening = node.openingElement;
+    const dataSlotAttr = opening.attributes.properties.find(
+      (prop): prop is JsxAttribute =>
+        isJsxAttribute(prop) && prop.name.getText() === 'data-auth-slot',
+    );
+
+    const dataSlotValue =
+      dataSlotAttr?.initializer && isStringLiteral(dataSlotAttr.initializer)
+        ? dataSlotAttr.initializer.text
+        : undefined;
+
+    return dataSlotValue === 'user-menu';
+  }
+
+  replace(
+    tree,
+    appLayoutTsxPath,
+    'JsxElement:has(JsxOpeningElement JsxAttribute[name.text="data-auth-slot"] StringLiteral[text="user-menu"])',
+    (node: JsxElement) => {
+      if (!isActionsSlot(node)) {
+        return node;
+      }
+
+      const userGreeting = factory.createJsxElement(
+        factory.createJsxOpeningElement(
+          factory.createIdentifier('div'),
+          undefined,
+          factory.createJsxAttributes([
+            factory.createJsxAttribute(
+              factory.createIdentifier('className'),
+              factory.createStringLiteral('user-menu'),
+            ),
+          ]),
+        ),
+        [
+          factory.createJsxElement(
+            factory.createJsxOpeningElement(
+              factory.createIdentifier('span'),
+              undefined,
+              factory.createJsxAttributes([
+                factory.createJsxAttribute(
+                  factory.createIdentifier('className'),
+                  factory.createStringLiteral('user-name'),
+                ),
+              ]),
+            ),
+            [
+              factory.createJsxText('Hi, '),
+              factory.createJsxExpression(
+                undefined,
+                factory.createTemplateExpression(
+                  factory.createTemplateHead(''),
+                  [
+                    factory.createTemplateSpan(
+                      factory.createElementAccessChain(
+                        factory.createPropertyAccessChain(
+                          factory.createIdentifier('user'),
+                          factory.createToken(SyntaxKind.QuestionDotToken),
+                          factory.createIdentifier('profile'),
+                        ),
+                        factory.createToken(SyntaxKind.QuestionDotToken),
+                        factory.createStringLiteral('cognito:username'),
+                      ),
+                      factory.createTemplateTail(''),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            factory.createJsxClosingElement(factory.createIdentifier('span')),
+          ),
+          factory.createJsxElement(
+            factory.createJsxOpeningElement(
+              factory.createIdentifier('button'),
+              undefined,
+              factory.createJsxAttributes([
+                factory.createJsxAttribute(
+                  factory.createIdentifier('type'),
+                  factory.createStringLiteral('button'),
+                ),
+                factory.createJsxAttribute(
+                  factory.createIdentifier('className'),
+                  factory.createStringLiteral('ghost-button'),
+                ),
+                factory.createJsxAttribute(
+                  factory.createIdentifier('onClick'),
+                  factory.createJsxExpression(
+                    undefined,
+                    factory.createArrowFunction(
+                      undefined,
+                      undefined,
+                      [],
+                      undefined,
+                      factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+                      factory.createBlock(
+                        [
+                          factory.createExpressionStatement(
+                            factory.createCallExpression(
+                              factory.createIdentifier('removeUser'),
+                              undefined,
+                              [],
+                            ),
+                          ),
+                          factory.createExpressionStatement(
+                            factory.createCallExpression(
+                              factory.createIdentifier('signoutRedirect'),
+                              undefined,
+                              [
+                                factory.createObjectLiteralExpression(
+                                  [
+                                    factory.createPropertyAssignment(
+                                      'post_logout_redirect_uri',
+                                      factory.createPropertyAccessExpression(
+                                        factory.createPropertyAccessExpression(
+                                          factory.createIdentifier('window'),
+                                          factory.createIdentifier('location'),
+                                        ),
+                                        factory.createIdentifier('origin'),
+                                      ),
+                                    ),
+                                    factory.createPropertyAssignment(
+                                      'extraQueryParams',
+                                      factory.createObjectLiteralExpression(
+                                        [
+                                          factory.createPropertyAssignment(
+                                            'redirect_uri',
+                                            factory.createPropertyAccessExpression(
+                                              factory.createPropertyAccessExpression(
+                                                factory.createIdentifier(
+                                                  'window',
+                                                ),
+                                                factory.createIdentifier(
+                                                  'location',
+                                                ),
+                                              ),
+                                              factory.createIdentifier('origin'),
+                                            ),
+                                          ),
+                                          factory.createPropertyAssignment(
+                                            'response_type',
+                                            factory.createStringLiteral('code'),
+                                          ),
+                                        ],
+                                        true,
+                                      ),
+                                    ),
+                                  ],
+                                  true,
+                                ),
+                              ],
+                            ),
+                          ),
+                          factory.createExpressionStatement(
+                            factory.createCallExpression(
+                              factory.createIdentifier('clearStaleState'),
+                              undefined,
+                              [],
+                            ),
+                          ),
+                        ],
+                        true,
+                      ),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+            [factory.createJsxText('Sign out')],
+            factory.createJsxClosingElement(factory.createIdentifier('button')),
+          ),
+        ],
+        factory.createJsxClosingElement(factory.createIdentifier('div')),
+      );
+
+      return factory.createJsxElement(
+        node.openingElement,
+        [userGreeting],
+        node.closingElement,
+      );
+    },
+  );
+}
+
 // Adds a top navigation dropdown with sign-out when using the Cloudscape UX provider..
 export function addCloudscapeAuthMenu(tree: Tree, appLayoutTsxPath: string) {
   replace(

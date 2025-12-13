@@ -40,7 +40,11 @@ import { addGeneratorMetricsIfApplicable } from '../../../utils/metrics';
 import { addHookResultToRouterProviderContext } from '../../../utils/ast/website';
 import { addIdentityInfra } from '../../../utils/identity-constructs/identity-constructs';
 import { resolveIacProvider } from '../../../utils/iac';
-import { addCloudscapeAuthMenu, addNoneAuthMenu } from './utils';
+import {
+  addCloudscapeAuthMenu,
+  addNoneAuthMenu,
+  addShadcnAuthMenu,
+} from './utils';
 
 export const COGNITO_AUTH_GENERATOR_INFO: NxGeneratorInfo =
   getGeneratorInfo(__filename);
@@ -223,6 +227,8 @@ export async function tsReactWebsiteAuthGenerator(
       addCloudscapeAuthMenu(tree, appLayoutTsxPath);
     } else if (uxProvider === 'None') {
       addNoneAuthMenu(tree, appLayoutTsxPath);
+    } else if (uxProvider === 'Shadcn') {
+      addShadcnAuthMenu(tree, appLayoutTsxPath);
     } else {
       throw new Error(
         `Top-level navigation menu to show the signed-in user for uxProvider "${uxProvider}" is not implemented.`,

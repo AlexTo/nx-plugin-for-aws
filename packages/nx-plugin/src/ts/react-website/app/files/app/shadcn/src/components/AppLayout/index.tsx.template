@@ -1,0 +1,17 @@
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+<% if (enableTanstackRouter) { %>import { AppSidebar } from "@/components/app-sidebar"<% } %>
+import { TopNav as Branding } from "./branding"
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <SidebarProvider>
+      <% if (enableTanstackRouter) { %><AppSidebar /><% } %>
+      <SidebarInset>
+        <Branding />
+        <div className="flex flex-1 flex-col gap-6 p-6 pt-4">
+          {children}
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
+  )
+}

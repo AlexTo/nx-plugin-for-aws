@@ -1591,6 +1591,150 @@ export default AppLayout;
         // Create snapshot of the modified AppLayout.tsx
         expect(appLayoutContent).toMatchSnapshot('app-layout-with-auth');
       });
+    } else if (uxProvider === 'Shadcn') {
+      it('should update AppLayout', async () => {
+        tree.write(
+          'packages/test-project/src/components/AppLayout/index.tsx',
+          `
+          import * as React from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Config from '../../config';
+import { Link, useLocation, useMatchRoute } from '@tanstack/react-router';
+
+const getBreadcrumbs = (
+  matchRoute: ReturnType<typeof useMatchRoute>,
+  pathName: string,
+  search: string,
+  defaultBreadcrumb: string,
+  availableRoutes?: string[],
+) => {
+  const segments = [
+    defaultBreadcrumb,
+    ...pathName.split('/').filter((segment) => segment !== ''),
+  ];
+
+  return segments.map((segment, i) => {
+    const href =
+      i === 0
+        ? '/'
+        : \`/\${segments
+            .slice(1, i + 1)
+            .join('/')
+            .replace('//', '/')}\`;
+
+    const matched =
+      !availableRoutes || availableRoutes.find((r) => matchRoute({ to: href }));
+
+    return {
+      href: matched ? \`\${href}\${search}\` : '#',
+      text: segment,
+    };
+  });
+};
+
+const AppLayout: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const matchRoute = useMatchRoute();
+  const { pathname, search } = useLocation();
+  const [activeBreadcrumbs, setActiveBreadcrumbs] = useState<
+    { href: string; text: string }[]
+  >([{ text: 'Home', href: '/' }]);
+  const navItems = useMemo(
+    () => [
+      { to: '/', label: 'Home' },
+    ],
+    [],
+  );
+
+  useEffect(() => {
+    const breadcrumbs = getBreadcrumbs(
+      matchRoute,
+      pathname,
+      Object.entries(search).reduce((p, [k, v]) => p + \`\${k}=\${v}\`, ''),
+      'Home',
+    );
+    setActiveBreadcrumbs(breadcrumbs);
+  }, [matchRoute, pathname, search]);
+
+  return (
+    <div className="shell">
+      <header className="shell__header">
+        <div className="shell__bar">
+          <a className="brand" href="/">
+            <div className="brand__logo" />
+            <div className="brand__meta">
+              <span className="brand__name">{Config.applicationName}</span>
+              <span className="brand__hint">React website starter</span>
+            </div>
+          </a>
+
+          <nav className="shell__nav">
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={pathname === item.to ? 'nav-link active' : 'nav-link'}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="shell__actions" data-auth-slot="user-menu">
+            <div className="chip">
+              <span className="chip__dot" />
+              <span className="chip__text">Preview</span>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main className="shell__main">
+        <div className="crumbs" aria-label="Breadcrumb">
+          {activeBreadcrumbs.map((crumb, index) => (
+            <span className="crumb" key={crumb.href || index}>
+              {index > 0 && <span className="crumb__separator">/</span>}
+              {index === activeBreadcrumbs.length - 1 ? (
+                <span className="crumb__current">{crumb.text}</span>
+              ) : (
+                <Link to={crumb.href}>{crumb.text}</Link>
+              )}
+            </span>
+          ))}
+        </div>
+
+        <section className="panel">{children}</section>
+      </main>
+    </div>
+  );
+};
+
+export default AppLayout;
+          `,
+        );
+
+        await tsReactWebsiteAuthGenerator(tree, options);
+
+        const appLayoutContent = tree
+          .read('packages/test-project/src/components/AppLayout/index.tsx')
+          .toString();
+
+        // Verify useAuth import is added
+        expect(appLayoutContent).toContain(
+          "import { useAuth } from 'react-oidc-context'",
+        );
+
+        // Verify useAuth hook is used in the component
+        expect(appLayoutContent).toContain(
+          'const { user, removeUser, signoutRedirect, clearStaleState } = useAuth()',
+        );
+
+        // Verify user menu is rendered
+        expect(appLayoutContent).toContain('className="user-menu"');
+        expect(appLayoutContent).toContain('className="ghost-button"');
+        expect(appLayoutContent).toContain(
+          "Hi, {`${user?.profile?.['cognito:username']}`}",
+        );
+        expect(appLayoutContent).toContain('clearStaleState()');
+      });
     } else if (uxProvider === 'Cloudscape') {
       it('should update AppLayout', async () => {
         // Setup AppLayout.tsx with a basic component
