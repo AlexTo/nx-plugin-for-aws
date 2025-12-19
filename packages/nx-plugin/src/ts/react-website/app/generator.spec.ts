@@ -209,6 +209,25 @@ describe('react-website generator', () => {
     expect(tree.exists('components.json')).toBeTruthy();
   });
 
+  it('should ensure .npmrc ignores workspace root check when using Shadcn', async () => {
+    await tsReactWebsiteGenerator(tree, { ...options, uxProvider: 'Shadcn' });
+
+    const npmrc = tree.read('.npmrc', 'utf-8') ?? '';
+    const npmrcLines = npmrc.split(/\r?\n/);
+    expect(npmrcLines).toContain('ignore-workspace-root-check=true');
+  });
+
+  it('should append ignore-workspace-root-check to existing .npmrc', async () => {
+    tree.write('.npmrc', 'strict-peer-dependencies=false\n');
+
+    await tsReactWebsiteGenerator(tree, { ...options, uxProvider: 'Shadcn' });
+
+    const npmrc = tree.read('.npmrc', 'utf-8') ?? '';
+    const npmrcLines = npmrc.split(/\r?\n/).filter(Boolean);
+    expect(npmrcLines).toContain('strict-peer-dependencies=false');
+    expect(npmrcLines).toContain('ignore-workspace-root-check=true');
+  });
+
   describe('Tanstack router integration', () => {
     it('should generate website with no router correctly', async () => {
       await tsReactWebsiteGenerator(tree, {

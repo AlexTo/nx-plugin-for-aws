@@ -30,12 +30,41 @@ const SHADCN_DEPS = [
   'tailwindcss-animate',
 ] as const;
 
+const NPMRC_IGNORE_WORKSPACE_ROOT_CHECK = 'ignore-workspace-root-check=true';
+
+const ensureNpmrcIgnoresWorkspaceRoot = (tree: Tree): boolean => {
+  const npmrcPath = '.npmrc';
+  if (tree.exists(npmrcPath)) {
+    const npmrcContent = tree.read(npmrcPath, 'utf-8');
+    const alreadyConfigured = npmrcContent
+      .split(/\r?\n/)
+      .some((line) => line.trim() === NPMRC_IGNORE_WORKSPACE_ROOT_CHECK);
+
+    if (alreadyConfigured) {
+      return false;
+    }
+
+    const needsTrailingNewline =
+      npmrcContent.length > 0 && !npmrcContent.endsWith('\n');
+    tree.write(
+      npmrcPath,
+      `${npmrcContent}${needsTrailingNewline ? '\n' : ''}${NPMRC_IGNORE_WORKSPACE_ROOT_CHECK}\n`,
+    );
+    return true;
+  }
+
+  tree.write(npmrcPath, `${NPMRC_IGNORE_WORKSPACE_ROOT_CHECK}\n`);
+  return true;
+};
+
 export async function sharedShadcnGenerator(tree: Tree) {
   const npmScopePrefix = getNpmScopePrefix(tree);
   const fullyQualifiedName = `${npmScopePrefix}${SHARED_SHADCN_NAME}`;
   const libraryRoot = joinPathFragments(PACKAGES_DIR, SHARED_SHADCN_DIR);
   const shadcnSrcRoot = joinPathFragments(libraryRoot, 'src');
   let didChange = false;
+
+  didChange ||= ensureNpmrcIgnoresWorkspaceRoot(tree);
 
   if (!tree.exists(joinPathFragments(libraryRoot, 'project.json'))) {
     await libraryGenerator(tree, {
