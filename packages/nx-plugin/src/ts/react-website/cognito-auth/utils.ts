@@ -23,12 +23,12 @@ export function addNoneAuthMenu(tree: Tree, appLayoutTsxPath: string) {
         isJsxAttribute(prop) && prop.name.getText() === 'className',
     );
 
-    const classValue =
+  const classValue =
       classAttr?.initializer && isStringLiteral(classAttr.initializer)
         ? classAttr.initializer.text
         : undefined;
 
-    return classValue === 'app-header-inner';
+    return classValue?.split(/\s+/).includes('app-header-inner');
   }
 
   replace(

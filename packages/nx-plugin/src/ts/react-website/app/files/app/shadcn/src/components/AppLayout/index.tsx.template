@@ -1,0 +1,173 @@
+import * as React from 'react';
+<% if (enableTanstackRouter) { %>import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+<% } %>
+import Config from '../../config';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  buttonVariants,
+  cn,
+} from '<%= scopeAlias %>common-shadcn';
+import { ArrowRight, Sparkles } from 'lucide-react';
+<% if (enableTanstackRouter) { %>import { Link, useLocation, useMatchRoute } from '@tanstack/react-router';
+
+const getBreadcrumbs = (
+  matchRoute: ReturnType<typeof useMatchRoute>,
+  pathName: string,
+  search: string,
+  defaultBreadcrumb: string,
+  availableRoutes?: string[],
+) => {
+  const segments = [
+    defaultBreadcrumb,
+    ...pathName.split('/').filter((segment) => segment !== ''),
+  ];
+
+  return segments.map((segment, i) => {
+    const href =
+      i === 0
+        ? '/'
+        : `/${segments
+          .slice(1, i + 1)
+          .join('/')
+          .replace('//', '/')}`;
+
+    const matched =
+      !availableRoutes || availableRoutes.find((r) => matchRoute({ to: href }));
+
+    return {
+      href: matched ? `${href}${search}` : '#',
+      text: segment,
+    };
+  });
+};<% } %>
+
+/**
+ * Defines the App layout and contains logic for routing.
+ */
+const AppLayout: React.FC<React.PropsWithChildren> = ({ children }) => {
+
+  <% if (enableTanstackRouter) { %>
+  const [activeBreadcrumbs, setActiveBreadcrumbs] = useState<{ href: string; text: string }[]>([
+    { text: '/', href: '/' },
+  ]);
+    const matchRoute = useMatchRoute();
+    const { pathname, search } = useLocation();
+    const navItems = useMemo(
+      () => [
+        { to: '/', label: 'Home' },
+      ],
+      [],
+    );
+
+    useEffect(() => {
+      const breadcrumbs = getBreadcrumbs(
+        matchRoute,
+        pathname,
+        Object.entries(search).reduce((p, [k, v]) => p + `${k}=${v}`, ''),
+        'Home',
+      );
+      setActiveBreadcrumbs(breadcrumbs);
+    }, [matchRoute, pathname, search]);
+  <% } %>
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-50">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-x-0 top-[-10%] h-[420px] bg-gradient-to-b from-slate-900/40 via-slate-900 to-slate-950 blur-[60px]" />
+      </div>
+      <header className="sticky top-0 z-10 border-b border-border/40 bg-background/75 backdrop-blur">
+        <div className="app-header-inner mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+          <a href="/" className="flex items-center gap-3 text-foreground no-underline">
+            <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary/15 text-lg font-semibold text-primary shadow-sm">
+              {(Config.applicationName ?? 'App').charAt(0)}
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.35em] text-muted-foreground">
+                Shadcn UI
+              </p>
+              <p className="text-sm font-semibold leading-tight">
+                {Config.applicationName}
+              </p>
+            </div>
+          </a>
+          <% if (enableTanstackRouter) { %>
+          <nav className="app-nav ml-auto hidden items-center gap-2 md:flex">
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  buttonVariants({
+                    variant: pathname === item.to ? 'secondary' : 'ghost',
+                    size: 'sm',
+                  }),
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <% } %>
+          <a
+            className={cn(
+              buttonVariants({ variant: 'outline', size: 'sm' }),
+              'hidden sm:inline-flex',
+            )}
+            href="https://ui.shadcn.com"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Explore UI
+            <ArrowRight className="h-4 w-4" />
+          </a>
+        </div>
+      </header>
+      <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 pb-16 pt-10">
+        <Card className="glass-panel shadow-xl">
+          <CardHeader className="flex flex-wrap items-start gap-3">
+            <div className="flex flex-1 flex-col gap-2">
+              <CardTitle className="flex items-center gap-2 text-2xl">
+                <Sparkles className="h-5 w-5 text-primary" />
+                {Config.applicationName}
+              </CardTitle>
+              <CardDescription>
+                A composable starting point that keeps your Shadcn UI pieces in a shared package.
+              </CardDescription>
+            </div>
+            <% if (enableTanstackRouter) { %>
+            <div className="flex flex-wrap items-center gap-2 rounded-full border border-border/60 bg-card/60 px-4 py-2 text-xs text-muted-foreground">
+              {activeBreadcrumbs.map((crumb, index) => (
+                <React.Fragment key={crumb.href || index}>
+                  {index > 0 && <span className="text-border">/</span>}
+                  {index === activeBreadcrumbs.length - 1 ? (
+                    <span className="font-medium text-foreground">
+                      {crumb.text}
+                    </span>
+                  ) : (
+                    <Link to={crumb.href} className="hover:text-foreground">
+                      {crumb.text}
+                    </Link>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+            <% } %>
+          </CardHeader>
+          <CardContent className="space-y-6 text-foreground">
+            {children}
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+};
+
+export default AppLayout;

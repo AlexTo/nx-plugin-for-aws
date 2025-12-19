@@ -1784,6 +1784,34 @@ export default AppLayout;
         // Create snapshot of the modified AppLayout.tsx
         expect(appLayoutContent).toMatchSnapshot('app-layout-with-auth');
       });
+    } else if (uxProvider === 'Shadcn') {
+      it('should update AppLayout', async () => {
+        tree.write(
+          'packages/test-project/src/components/AppLayout/index.tsx',
+          `
+          import * as React from 'react';
+
+          const AppLayout: React.FC<React.PropsWithChildren> = ({ children }) => {
+            return (
+              <header className="app-header">
+                <div className="app-header-inner">{children}</div>
+              </header>
+            );
+          };
+
+          export default AppLayout;
+          `,
+        );
+
+        await tsReactWebsiteAuthGenerator(tree, options);
+
+        const appLayoutContent = tree
+          .read('packages/test-project/src/components/AppLayout/index.tsx')
+          .toString();
+
+        expect(appLayoutContent).toContain('user-greeting');
+        expect(appLayoutContent).toContain('signoutRedirect');
+      });
     } else {
       throw new Error(`Unhandled uxProvider in test: ${uxProvider}`);
     }

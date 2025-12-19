@@ -199,6 +199,16 @@ describe('react-website generator', () => {
     expectHasMetricTags(tree, REACT_WEBSITE_APP_GENERATOR_INFO.metric);
   });
 
+  it('should scaffold the shared Shadcn package and components.json', async () => {
+    await tsReactWebsiteGenerator(tree, { ...options, uxProvider: 'Shadcn' });
+
+    expect(tree.exists('packages/common/shadcn/project.json')).toBeTruthy();
+    expect(
+      tree.exists('packages/common/shadcn/src/components/ui/button.tsx'),
+    ).toBeTruthy();
+    expect(tree.exists('components.json')).toBeTruthy();
+  });
+
   describe('Tanstack router integration', () => {
     it('should generate website with no router correctly', async () => {
       await tsReactWebsiteGenerator(tree, {
@@ -683,7 +693,16 @@ describe.each(SUPPORTED_UX_PROVIDERS.map((p) => [p]))(
     it('should update package.json with required dependencies', async () => {
       await tsReactWebsiteGenerator(tree, options);
 
-      snapshotTreeDir(tree, 'test-app/src');
+      if (uxProvider === 'Shadcn') {
+        expect(
+          tree.read('test-app/src/components/AppLayout/index.tsx')?.toString(),
+        ).toContain('common-shadcn');
+        expect(
+          tree.read('test-app/src/components/AppLayout/index.tsx')?.toString(),
+        ).toContain('Shadcn UI');
+      } else {
+        snapshotTreeDir(tree, 'test-app/src');
+      }
 
       const packageJson = JSON.parse(tree.read('package.json').toString());
       // Check for website dependencies
@@ -695,6 +714,15 @@ describe.each(SUPPORTED_UX_PROVIDERS.map((p) => [p]))(
           expect(packageJson.dependencies).toMatchObject({
             '@cloudscape-design/components': expect.any(String),
             '@cloudscape-design/board-components': expect.any(String),
+          });
+          break;
+        case 'Shadcn':
+          expect(packageJson.dependencies).toMatchObject({
+            'class-variance-authority': expect.any(String),
+            clsx: expect.any(String),
+            'tailwind-merge': expect.any(String),
+            'tailwindcss-animate': expect.any(String),
+            'lucide-react': expect.any(String),
           });
           break;
         default:

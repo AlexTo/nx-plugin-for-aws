@@ -1,0 +1,15 @@
+import AppLayout from './components/AppLayout';
+
+export const App = () => (
+  <AppLayout>
+    <div className="space-y-3">
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        Welcome
+      </h1>
+      <p className="text-base leading-relaxed text-muted-foreground">
+        This starter pairs the Nx React website generator with a shared Shadcn UI kit.
+        Extend <code>packages/common/shadcn</code> with your favorite components and reuse them across apps.
+      </p>
+    </div>
+  </AppLayout>
+);

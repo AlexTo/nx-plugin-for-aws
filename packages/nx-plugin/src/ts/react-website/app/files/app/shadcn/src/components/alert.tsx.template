@@ -1,0 +1,41 @@
+import { AlertTriangle, Info } from 'lucide-react';
+import { cn } from '<%= scopeAlias %>common-shadcn';
+import * as React from 'react';
+
+type AlertIntent = 'info' | 'error';
+
+export interface AlertProps {
+  title?: string;
+  intent?: AlertIntent;
+  children: React.ReactNode;
+}
+
+export const Alert: React.FC<AlertProps> = ({
+  title = 'Heads up',
+  intent = 'info',
+  children,
+}) => {
+  const Icon = intent === 'error' ? AlertTriangle : Info;
+  const tone =
+    intent === 'error'
+      ? 'border-destructive/60 bg-destructive/10 text-destructive-foreground'
+      : 'border-primary/30 bg-primary/5 text-foreground';
+
+  return (
+    <div
+      className={cn(
+        'flex gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm',
+        tone,
+      )}
+      role={intent === 'error' ? 'alert' : 'status'}
+    >
+      <Icon className="mt-0.5 h-4 w-4 flex-none" aria-hidden />
+      <div className="space-y-1">
+        <div className="text-sm font-semibold leading-tight">{title}</div>
+        <div className="text-sm leading-relaxed text-muted-foreground">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};

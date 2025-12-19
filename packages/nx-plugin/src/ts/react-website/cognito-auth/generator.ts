@@ -221,7 +221,7 @@ export async function tsReactWebsiteAuthGenerator(
     // Add a top-level navigation menu that shows the signed-in user's profile and actions
     if (uxProvider === 'Cloudscape') {
       addCloudscapeAuthMenu(tree, appLayoutTsxPath);
-    } else if (uxProvider === 'None') {
+    } else if (uxProvider === 'None' || uxProvider === 'Shadcn') {
       addNoneAuthMenu(tree, appLayoutTsxPath);
     } else {
       throw new Error(

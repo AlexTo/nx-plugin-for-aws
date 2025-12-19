@@ -42,13 +42,15 @@ import {
   addGeneratorMetadata,
   getGeneratorInfo,
 } from '../../../utils/nx';
+import { sharedShadcnGenerator } from '../../../utils/shared-shadcn';
 import { addGeneratorMetricsIfApplicable } from '../../../utils/metrics';
 import { addWebsiteInfra } from '../../../utils/website-constructs/website-constructs';
 import { resolveIacProvider } from '../../../utils/iac';
+import { UX_PROVIDERS, type UxProviderOption } from '../../../utils/ux';
 
-export const SUPPORTED_UX_PROVIDERS = ['None', 'Cloudscape'] as const;
+export const SUPPORTED_UX_PROVIDERS = UX_PROVIDERS;
 
-export type UxProvider = (typeof SUPPORTED_UX_PROVIDERS)[number];
+export type UxProvider = UxProviderOption;
 
 export const REACT_WEBSITE_APP_GENERATOR_INFO: NxGeneratorInfo =
   getGeneratorInfo(__filename);
@@ -60,7 +62,11 @@ export async function tsReactWebsiteGenerator(
   const enableTailwind = schema.enableTailwind ?? true;
   const enableTanstackRouter = schema.enableTanstackRouter ?? true;
   const uxProvider: UxProvider = schema.uxProvider ?? 'Cloudscape';
+  if (uxProvider === 'Shadcn' && !enableTailwind) {
+    throw new Error('Shadcn requires TailwindCSS to be enabled.');
+  }
   const npmScopePrefix = getNpmScopePrefix(tree);
+  const scopeAlias = toScopeAlias(npmScopePrefix);
   const websiteNameClassName = toClassName(schema.name);
   const websiteNameKebabCase = toKebabCase(schema.name);
   const fullyQualifiedName = `${npmScopePrefix}${websiteNameKebabCase}`;
@@ -186,6 +192,10 @@ export async function tsReactWebsiteGenerator(
     fullyQualifiedName,
   });
 
+  if (uxProvider === 'Shadcn') {
+    await sharedShadcnGenerator(tree);
+  }
+
   await sharedConstructsGenerator(tree, {
     iacProvider,
   });
@@ -193,7 +203,7 @@ export async function tsReactWebsiteGenerator(
   addWebsiteInfra(tree, {
     iacProvider,
     websiteProjectName: fullyQualifiedName,
-    scopeAlias: toScopeAlias(npmScopePrefix),
+    scopeAlias,
     websiteContentPath: joinPathFragments('dist', websiteContentPath),
     websiteNameKebabCase,
     websiteNameClassName,
@@ -221,6 +231,7 @@ export async function tsReactWebsiteGenerator(
       pkgMgrCmd: getPackageManagerCommand().exec,
       enableTailwind,
       enableTanstackRouter,
+      scopeAlias,
     }, // config object to replace variable in file templates
     {
       overwriteStrategy: OverwriteStrategy.Overwrite,
@@ -237,6 +248,7 @@ export async function tsReactWebsiteGenerator(
       pkgMgrCmd: getPackageManagerCommand().exec,
       enableTailwind,
       enableTanstackRouter,
+      scopeAlias,
     }, // config object to replace variable in file templates
     {
       overwriteStrategy: OverwriteStrategy.Overwrite,
@@ -263,6 +275,7 @@ export async function tsReactWebsiteGenerator(
         pkgMgrCmd: getPackageManagerCommand().exec,
         enableTailwind,
         enableTanstackRouter,
+        scopeAlias,
       },
       {
         overwriteStrategy: OverwriteStrategy.Overwrite,
@@ -279,6 +292,7 @@ export async function tsReactWebsiteGenerator(
         pkgMgrCmd: getPackageManagerCommand().exec,
         enableTailwind,
         enableTanstackRouter,
+        scopeAlias,
       }, // config object to replace variable in file templates
       {
         overwriteStrategy: OverwriteStrategy.Overwrite,
@@ -507,6 +521,14 @@ export async function tsReactWebsiteGenerator(
       '@cloudscape-design/components',
       '@cloudscape-design/board-components',
       '@cloudscape-design/global-styles',
+    );
+  } else if (uxProvider === 'Shadcn') {
+    dependencies.push(
+      'class-variance-authority',
+      'clsx',
+      'lucide-react',
+      'tailwind-merge',
+      'tailwindcss-animate',
     );
   }
 
