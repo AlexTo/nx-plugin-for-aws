@@ -5,7 +5,7 @@
     "declaration": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "bin/**/*.ts", "sdk/**/*.ts"],
+  "include": ["src/**/*.ts", "bin/**/*.ts", "sdk/**/*.ts", "src/utils/files/common/shadcn/src/index.ts.template", "src/utils/files/common/shadcn/src/hooks/use-mobile.ts.template"],
   "exclude": [
     "src/**/*.spec.ts",
     "src/**/*.test.ts",

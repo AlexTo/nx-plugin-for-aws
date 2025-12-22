@@ -1,1 +1,1 @@
-@import '<%= scopeAlias %>common-shadcn/styles/globals.css';
+@import '<%= sharedShadcnStylesImport %>';

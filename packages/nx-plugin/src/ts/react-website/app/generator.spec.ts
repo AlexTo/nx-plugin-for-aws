@@ -207,6 +207,7 @@ describe('react-website generator', () => {
       tree.exists('packages/common/shadcn/src/components/ui/button.tsx'),
     ).toBeTruthy();
     expect(tree.exists('components.json')).toBeTruthy();
+    expect(tree.exists('packages/common/shadcn/.babelrc')).toBeFalsy();
   });
 
   it('should ensure .npmrc ignores workspace root check when using Shadcn', async () => {
@@ -717,8 +718,8 @@ describe.each(SUPPORTED_UX_PROVIDERS.map((p) => [p]))(
           tree.read('test-app/src/components/AppLayout/index.tsx')?.toString(),
         ).toContain('common-shadcn');
         expect(
-          tree.read('test-app/src/components/AppLayout/index.tsx')?.toString(),
-        ).toContain('Shadcn UI');
+          tree.read('test-app/src/components/AppLayout/branding.tsx')?.toString(),
+        ).toContain('Config.applicationName');
       } else {
         snapshotTreeDir(tree, 'test-app/src');
       }
@@ -740,8 +741,14 @@ describe.each(SUPPORTED_UX_PROVIDERS.map((p) => [p]))(
             'class-variance-authority': expect.any(String),
             clsx: expect.any(String),
             'tailwind-merge': expect.any(String),
-            'tailwindcss-animate': expect.any(String),
+            'tw-animate-css': expect.any(String),
             'lucide-react': expect.any(String),
+            '@radix-ui/react-dialog': expect.any(String),
+            '@radix-ui/react-slot': expect.any(String),
+            '@radix-ui/react-label': expect.any(String),
+            '@radix-ui/react-primitive': expect.any(String),
+            '@radix-ui/react-separator': expect.any(String),
+            '@radix-ui/react-tooltip': expect.any(String),
           });
           break;
         default:

@@ -6,12 +6,11 @@ export const Route = createFileRoute('/')({
 
 function RouteComponent() {
   return (
-    <div className="space-y-3 text-foreground">
-      <p className="text-base text-muted-foreground">
-        Your routes live in <code>src/routes</code>. Add new folders or files to create
-        additional pages, and wire Shadcn components from <code>packages/common/shadcn</code>
-        for a consistent experience.
-      </p>
+    <div className="text-center">
+      <header>
+        <h1>Welcome</h1>
+        <p>Welcome to your new React website!</p>
+      </header>
     </div>
   );
 }

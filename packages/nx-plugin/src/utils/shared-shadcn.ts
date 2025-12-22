@@ -25,9 +25,15 @@ import { withVersions } from './versions';
 const SHADCN_DEPS = [
   'class-variance-authority',
   'clsx',
-  'lucide-react',
   'tailwind-merge',
-  'tailwindcss-animate',
+  'lucide-react',
+  'tw-animate-css',
+  '@radix-ui/react-label',
+  '@radix-ui/react-primitive',
+  '@radix-ui/react-slot',
+  '@radix-ui/react-separator',
+  '@radix-ui/react-dialog',
+  '@radix-ui/react-tooltip',
 ] as const;
 
 const NPMRC_IGNORE_WORKSPACE_ROOT_CHECK = 'ignore-workspace-root-check=true';
@@ -59,6 +65,8 @@ const ensureNpmrcIgnoresWorkspaceRoot = (tree: Tree): boolean => {
 
 export async function sharedShadcnGenerator(tree: Tree) {
   const npmScopePrefix = getNpmScopePrefix(tree);
+  const scopeAlias = toScopeAlias(npmScopePrefix);
+  const sharedShadcnAlias = `${scopeAlias}${SHARED_SHADCN_NAME}`;
   const fullyQualifiedName = `${npmScopePrefix}${SHARED_SHADCN_NAME}`;
   const libraryRoot = joinPathFragments(PACKAGES_DIR, SHARED_SHADCN_DIR);
   const shadcnSrcRoot = joinPathFragments(libraryRoot, 'src');
@@ -76,14 +84,17 @@ export async function sharedShadcnGenerator(tree: Tree) {
       style: 'css',
     });
 
+    // The Nx React library generator can scaffold a Babel config we don't need.
+    tree.delete(joinPathFragments(libraryRoot, '.babelrc'));
+
     tree.delete(shadcnSrcRoot);
 
     generateFiles(
       tree,
-      joinPathFragments(__dirname, 'files', 'common', 'shadcn', 'src'),
+      joinPathFragments(__dirname, 'files', SHARED_SHADCN_DIR, 'src'),
       shadcnSrcRoot,
       {
-        scopeAlias: toScopeAlias(npmScopePrefix),
+        scopeAlias,
       },
       {
         overwriteStrategy: OverwriteStrategy.KeepExisting,
@@ -92,12 +103,12 @@ export async function sharedShadcnGenerator(tree: Tree) {
 
     generateFiles(
       tree,
-      joinPathFragments(__dirname, 'files', 'common', 'shadcn'),
+      joinPathFragments(__dirname, 'files', SHARED_SHADCN_DIR),
       libraryRoot,
       {
         fullyQualifiedName,
         pkgMgrCmd: getPackageManagerCommand().exec,
-        scopeAlias: toScopeAlias(npmScopePrefix),
+        scopeAlias,
       },
       {
         overwriteStrategy: OverwriteStrategy.KeepExisting,
@@ -109,16 +120,20 @@ export async function sharedShadcnGenerator(tree: Tree) {
       fullyQualifiedName,
     });
 
-    updateJson(tree, joinPathFragments(libraryRoot, 'tsconfig.json'), (json) => ({
-      ...json,
-      compilerOptions: {
-        ...json.compilerOptions,
-        paths: {
-          ...(json.compilerOptions?.paths ?? {}),
-          '@/*': ['./src/*'],
+    updateJson(
+      tree,
+      joinPathFragments(libraryRoot, 'tsconfig.json'),
+      (json) => ({
+        ...json,
+        compilerOptions: {
+          ...json.compilerOptions,
+          paths: {
+            ...(json.compilerOptions?.paths ?? {}),
+            '@/*': ['./src/*'],
+          },
         },
-      },
-    }));
+      }),
+    );
 
     updateJson(
       tree,
@@ -139,12 +154,88 @@ export async function sharedShadcnGenerator(tree: Tree) {
     didChange = true;
   }
 
+  updateJson(tree, 'tsconfig.base.json', (json) => ({
+    ...json,
+    compilerOptions: {
+      ...json.compilerOptions,
+      paths: {
+        ...(json.compilerOptions?.paths ?? {}),
+        [`${sharedShadcnAlias}/*`]: [
+          joinPathFragments(libraryRoot, 'src', '*'),
+        ],
+      },
+    },
+  }));
+
+  if (tree.exists(joinPathFragments(libraryRoot, 'project.json'))) {
+    updateJson(tree, joinPathFragments(libraryRoot, 'project.json'), (json) => {
+      const buildTarget = json.targets?.build;
+      if (!buildTarget) {
+        return json;
+      }
+
+      const desiredOutputPath = joinPathFragments('dist', libraryRoot);
+      const currentOutputPath = buildTarget.options?.outputPath;
+      const outputs =
+        buildTarget.outputs && buildTarget.outputs.length > 0
+          ? buildTarget.outputs
+          : ['{options.outputPath}'];
+      const compileTarget =
+        json.targets?.compile ??
+        ({
+          executor: 'nx:run-commands',
+          outputs: [
+            `{workspaceRoot}/${joinPathFragments('dist', libraryRoot, 'tsc')}`,
+          ],
+          options: {
+            command: 'tsc --build tsconfig.lib.json',
+            cwd: '{projectRoot}',
+          },
+        } as const);
+      const buildDependsOn = Array.from(
+        new Set([...(buildTarget.dependsOn ?? []), 'compile']),
+      );
+      const unchanged =
+        currentOutputPath === desiredOutputPath &&
+        outputs === buildTarget.outputs &&
+        buildDependsOn.length === (buildTarget.dependsOn ?? []).length &&
+        buildDependsOn.every(
+          (d, i) => d === (buildTarget.dependsOn ?? [])[i],
+        ) &&
+        json.targets?.compile;
+      if (unchanged) {
+        return json;
+      }
+
+      didChange = true;
+
+      return {
+        ...json,
+        targets: {
+          ...json.targets,
+          build: {
+            ...buildTarget,
+            outputs,
+            dependsOn: buildDependsOn,
+            options: {
+              ...buildTarget.options,
+              outputPath: desiredOutputPath,
+            },
+          },
+          compile: compileTarget,
+        },
+      };
+    });
+  }
+
   if (!tree.exists('components.json')) {
     generateFiles(
       tree,
       joinPathFragments(__dirname, 'files', 'shadcn'),
       '.',
-      {},
+      {
+        sharedShadcnAlias,
+      },
       {
         overwriteStrategy: OverwriteStrategy.KeepExisting,
       },

@@ -28,6 +28,10 @@ import { getNpmScopePrefix, toScopeAlias } from '../../../utils/npm-scope';
 import { configureTsProject } from '../../lib/ts-project-utils';
 import { ITsDepVersion, withVersions } from '../../../utils/versions';
 import { getRelativePathToRoot } from '../../../utils/paths';
+import {
+  PACKAGES_DIR,
+  SHARED_SHADCN_DIR,
+} from '../../../utils/shared-constructs-constants';
 import { kebabCase, toClassName, toKebabCase } from '../../../utils/names';
 import {
   addDestructuredImport,
@@ -35,7 +39,7 @@ import {
   addSingleImport,
 } from '../../../utils/ast';
 import { formatFilesInSubtree } from '../../../utils/format';
-import { relative } from 'path';
+import { relative, sep } from 'path';
 import { sortObjectKeys } from '../../../utils/object';
 import {
   NxGeneratorInfo,
@@ -211,6 +215,34 @@ export async function tsReactWebsiteGenerator(
 
   const projectConfig = readProjectConfiguration(tree, fullyQualifiedName);
   const libraryRoot = projectConfig.root;
+  const sharedShadcnStylesImport = relative(
+    joinPathFragments(libraryRoot, 'src'),
+    joinPathFragments(
+      PACKAGES_DIR,
+      SHARED_SHADCN_DIR,
+      'src',
+      'styles',
+      'globals.css',
+    ),
+  ).split(sep).join('/');
+  const sharedShadcnTsconfigRef = relative(
+    joinPathFragments(tree.root, websiteContentPath),
+    joinPathFragments(
+      tree.root,
+      PACKAGES_DIR,
+      SHARED_SHADCN_DIR,
+      'tsconfig.json',
+    ),
+  ).split(sep).join('/');
+  const templateOptions = {
+    ...schema,
+    fullyQualifiedName,
+    pkgMgrCmd: getPackageManagerCommand().exec,
+    enableTailwind,
+    enableTanstackRouter,
+    scopeAlias,
+    sharedShadcnStylesImport,
+  };
   tree.delete(joinPathFragments(libraryRoot, 'src', 'app'));
   const appCommonTemplatePath = joinPathFragments(
     __dirname,
@@ -225,14 +257,7 @@ export async function tsReactWebsiteGenerator(
     tree, // the virtual file system
     appCommonTemplatePath, // path to the file templates
     libraryRoot, // destination path of the files
-    {
-      ...schema,
-      fullyQualifiedName,
-      pkgMgrCmd: getPackageManagerCommand().exec,
-      enableTailwind,
-      enableTanstackRouter,
-      scopeAlias,
-    }, // config object to replace variable in file templates
+    templateOptions, // config object to replace variable in file templates
     {
       overwriteStrategy: OverwriteStrategy.Overwrite,
     },
@@ -242,14 +267,7 @@ export async function tsReactWebsiteGenerator(
     tree, // the virtual file system
     appTemplatePath, // path to the file templates
     libraryRoot, // destination path of the files
-    {
-      ...schema,
-      fullyQualifiedName,
-      pkgMgrCmd: getPackageManagerCommand().exec,
-      enableTailwind,
-      enableTanstackRouter,
-      scopeAlias,
-    }, // config object to replace variable in file templates
+    templateOptions, // config object to replace variable in file templates
     {
       overwriteStrategy: OverwriteStrategy.Overwrite,
     },
@@ -269,14 +287,7 @@ export async function tsReactWebsiteGenerator(
       tree,
       routerCommonTemplatePath,
       libraryRoot,
-      {
-        ...schema,
-        fullyQualifiedName,
-        pkgMgrCmd: getPackageManagerCommand().exec,
-        enableTailwind,
-        enableTanstackRouter,
-        scopeAlias,
-      },
+      templateOptions,
       {
         overwriteStrategy: OverwriteStrategy.Overwrite,
       },
@@ -286,14 +297,7 @@ export async function tsReactWebsiteGenerator(
       tree,
       routerTemplatePath,
       libraryRoot,
-      {
-        ...schema,
-        fullyQualifiedName,
-        pkgMgrCmd: getPackageManagerCommand().exec,
-        enableTailwind,
-        enableTanstackRouter,
-        scopeAlias,
-      }, // config object to replace variable in file templates
+      templateOptions, // config object to replace variable in file templates
       {
         overwriteStrategy: OverwriteStrategy.Overwrite,
       },
@@ -509,6 +513,17 @@ export async function tsReactWebsiteGenerator(
         tsBuildInfoFile: joinPathFragments(distDir, 'tsconfig.lib.tsbuildinfo'),
         lib: ['DOM'],
       },
+      references:
+        uxProvider === 'Shadcn'
+          ? [
+              ...(tsconfig.references ?? []).filter(
+                (ref) => ref.path !== sharedShadcnTsconfigRef,
+              ),
+              {
+                path: sharedShadcnTsconfigRef,
+              },
+            ]
+          : tsconfig.references,
     }),
   );
 
@@ -528,7 +543,7 @@ export async function tsReactWebsiteGenerator(
       'clsx',
       'lucide-react',
       'tailwind-merge',
-      'tailwindcss-animate',
+      'tw-animate-css',
     );
   }
 
