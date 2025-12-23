@@ -1789,13 +1789,35 @@ export default AppLayout;
         tree.write(
           'packages/test-project/src/components/AppLayout/index.tsx',
           `
-          import * as React from 'react';
+          import * as React from "react";
+          import { SidebarInset, SidebarProvider } from "common-shadcn/components/ui/sidebar";
+          import { Separator } from "common-shadcn/components/ui/separator";
+          import Config from "../../config";
 
-          const AppLayout: React.FC<React.PropsWithChildren> = ({ children }) => {
+          const AppLayout = ({ children }: { children: React.ReactNode }) => {
             return (
-              <header className="app-header">
-                <div className="app-header-inner">{children}</div>
-              </header>
+              <SidebarProvider>
+                <SidebarInset>
+                  <header id="top-nav" className="supports-backdrop-blur:bg-background/60 sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur">
+                    <div className="flex items-center gap-3">
+                      <Separator orientation="vertical" className="h-6" />
+                      <div className="flex items-center gap-2">
+                        <img
+                          alt={\`\${Config.applicationName} logo\`}
+                          className="size-10 rounded-lg border border-border/60 bg-background object-cover shadow-sm"
+                          src={Config.logo}
+                        />
+                        <div className="flex flex-col leading-tight">
+                          <span className="text-sm font-semibold">
+                            {Config.applicationName}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </header>
+                  <div className="flex flex-1 flex-col gap-6 p-6 pt-4">{children}</div>
+                </SidebarInset>
+              </SidebarProvider>
             );
           };
 
@@ -1809,8 +1831,11 @@ export default AppLayout;
           .read('packages/test-project/src/components/AppLayout/index.tsx')
           .toString();
 
-        expect(appLayoutContent).toContain('user-greeting');
-        expect(appLayoutContent).toContain('signoutRedirect');
+        expect(appLayoutContent).toContain(
+          "const { user, removeUser, signoutRedirect, clearStaleState } = useAuth()",
+        );
+        expect(appLayoutContent).toContain('Open user menu');
+        expect(appLayoutContent).toContain('Sign out');
       });
     } else {
       throw new Error(`Unhandled uxProvider in test: ${uxProvider}`);

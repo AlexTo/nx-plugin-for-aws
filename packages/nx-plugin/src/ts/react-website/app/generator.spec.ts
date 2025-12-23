@@ -717,9 +717,6 @@ describe.each(SUPPORTED_UX_PROVIDERS.map((p) => [p]))(
         expect(
           tree.read('test-app/src/components/AppLayout/index.tsx')?.toString(),
         ).toContain('common-shadcn');
-        expect(
-          tree.read('test-app/src/components/AppLayout/branding.tsx')?.toString(),
-        ).toContain('Config.applicationName');
       } else {
         snapshotTreeDir(tree, 'test-app/src');
       }

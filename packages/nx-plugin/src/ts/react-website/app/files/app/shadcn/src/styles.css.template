@@ -1,1 +1,2 @@
 @import '<%= sharedShadcnStylesImport %>';
+@source './**/*.{ts,tsx}';

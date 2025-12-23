@@ -40,7 +40,11 @@ import { addGeneratorMetricsIfApplicable } from '../../../utils/metrics';
 import { addHookResultToRouterProviderContext } from '../../../utils/ast/website';
 import { addIdentityInfra } from '../../../utils/identity-constructs/identity-constructs';
 import { resolveIacProvider } from '../../../utils/iac';
-import { addCloudscapeAuthMenu, addNoneAuthMenu } from './utils';
+import {
+  addCloudscapeAuthMenu,
+  addNoneAuthMenu,
+  addShadcnAuthMenu,
+} from './utils';
 
 export const COGNITO_AUTH_GENERATOR_INFO: NxGeneratorInfo =
   getGeneratorInfo(__filename);
@@ -218,15 +222,21 @@ export async function tsReactWebsiteAuthGenerator(
       },
     );
     // TODO: update utils if they exist by appending to the array
-    // Add a top-level navigation menu that shows the signed-in user's profile and actions
-    if (uxProvider === 'Cloudscape') {
-      addCloudscapeAuthMenu(tree, appLayoutTsxPath);
-    } else if (uxProvider === 'None' || uxProvider === 'Shadcn') {
-      addNoneAuthMenu(tree, appLayoutTsxPath);
-    } else {
-      throw new Error(
-        `Top-level navigation menu to show the signed-in user for uxProvider "${uxProvider}" is not implemented.`,
-      );
+    // Add UI components that show the signed-in user's profile and actions
+    switch (uxProvider) {
+      case 'Cloudscape':
+        addCloudscapeAuthMenu(tree, appLayoutTsxPath);
+        break;
+      case 'Shadcn':
+        addShadcnAuthMenu(tree, appLayoutTsxPath);
+        break;
+      case 'None':
+        addNoneAuthMenu(tree, appLayoutTsxPath);
+        break;
+      default:
+        throw new Error(
+          `UI components to show the signed-in user for uxProvider "${uxProvider}" are not implemented.`,
+        );
     }
   } else {
     console.info(

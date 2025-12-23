@@ -1,4 +1,4 @@
-import { Home } from "lucide-react"
+import { Home } from 'lucide-react';
 
 import {
   Sidebar,
@@ -9,18 +9,17 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "<%= scopeAlias %>common-shadcn/components/ui/sidebar"
-
-// Menu items.
-const items = [
-  {
-    title: "Home",
-    url: "#",
-    icon: Home,
-  }
-]
+} from '<%= scopeAlias %>common-shadcn/components/ui/sidebar';
 
 export function AppSidebar() {
+  // Menu items.
+  const navItems = [
+    {
+      label: 'Home',
+      to: '/',
+      icon: Home,
+    },
+  ];
   return (
     <Sidebar>
       <SidebarContent>
@@ -28,12 +27,12 @@ export function AppSidebar() {
           <SidebarGroupLabel>Application</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
+              {navItems.map((item) => (
+                <SidebarMenuItem key={item.label}>
                   <SidebarMenuButton asChild>
-                    <a href={item.url}>
+                    <a href={item.to}>
                       <item.icon />
-                      <span>{item.title}</span>
+                      <span>{item.label}</span>
                     </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -43,5 +42,5 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-  )
+  );
 }
