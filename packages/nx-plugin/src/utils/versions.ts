@@ -74,6 +74,7 @@ export const TS_VERSIONS = {
   '@radix-ui/react-tooltip': '1.2.8',
   rimraf: '6.1.2',
   rolldown: '1.0.0-beta.52',
+  shadcn: '3.6.2',
   'source-map-support': '0.5.21',
   tailwindcss: '4.1.17',
   '@tailwindcss/vite': '4.1.17',
