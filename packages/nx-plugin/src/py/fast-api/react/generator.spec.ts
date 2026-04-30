@@ -491,10 +491,10 @@ describe(
         tree.read('frontend/project.json', 'utf-8'),
       );
 
-      // Verify that serve-local target now depends on backend serve target
+      // Verify that serve-local target now depends on backend serve-local target
       expect(frontendProject.targets['serve-local'].dependsOn).toContainEqual({
         projects: ['proj.test_api'],
-        target: 'serve',
+        target: 'serve-local',
       });
       // Should also depend on the generate target (for initial generation)
       expect(frontendProject.targets['serve-local'].dependsOn).toContain(
