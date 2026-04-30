@@ -101,6 +101,16 @@ export const pyFastApiProjectGenerator = async (
     continuous: true,
   };
 
+  projectConfig.targets['serve-local'] = {
+    ...projectConfig.targets.serve,
+    options: {
+      ...projectConfig.targets.serve.options,
+      env: {
+        SERVE_LOCAL: 'true',
+      },
+    },
+  };
+
   projectConfig.metadata = {
     ...projectConfig.metadata,
     apiName: schema.name,
