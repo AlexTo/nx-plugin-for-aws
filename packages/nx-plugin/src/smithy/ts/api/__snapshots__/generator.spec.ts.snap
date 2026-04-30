@@ -1299,6 +1299,18 @@ exports[`tsSmithyApiGenerator > should generate smithy ts api with default optio
       },
       "continuous": true,
       "dependsOn": ["copy-ssdk", "watch-copy-ssdk"]
+    },
+    "serve-local": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsx --watch src/local-server.ts",
+        "cwd": "{projectRoot}",
+        "env": {
+          "SERVE_LOCAL": "true"
+        }
+      },
+      "continuous": true,
+      "dependsOn": ["copy-ssdk", "watch-copy-ssdk"]
     }
   }
 }
