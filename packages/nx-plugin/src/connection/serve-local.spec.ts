@@ -36,7 +36,7 @@ describe('serve-local', () => {
         }),
       );
 
-      // Setup target project with continuous serve target
+      // Setup target project with continuous serve-local target
       tree.write(
         'apps/backend/project.json',
         JSON.stringify({
@@ -44,7 +44,7 @@ describe('serve-local', () => {
           root: 'apps/backend',
           sourceRoot: 'apps/backend/src',
           targets: {
-            serve: {
+            'serve-local': {
               executor: '@nx/node:execute',
               continuous: true,
               options: {},
@@ -62,7 +62,7 @@ describe('serve-local', () => {
       expect(updatedProject.targets['serve-local'].dependsOn).toEqual([
         {
           projects: ['backend'],
-          target: 'serve',
+          target: 'serve-local',
         },
       ]);
     });
@@ -90,7 +90,7 @@ describe('serve-local', () => {
         }),
       );
 
-      // Setup target project with continuous serve target
+      // Setup target project with continuous serve-local target
       tree.write(
         'apps/backend/project.json',
         JSON.stringify({
@@ -98,7 +98,7 @@ describe('serve-local', () => {
           root: 'apps/backend',
           sourceRoot: 'apps/backend/src',
           targets: {
-            serve: {
+            'serve-local': {
               executor: '@nx/node:execute',
               continuous: true,
               options: {},
@@ -120,12 +120,12 @@ describe('serve-local', () => {
         },
         {
           projects: ['backend'],
-          target: 'serve',
+          target: 'serve-local',
         },
       ]);
     });
 
-    it('should not modify project when target project lacks continuous serve target', async () => {
+    it('should not modify project when target project lacks continuous serve-local target', async () => {
       // Setup source project with serve-local target
       tree.write(
         'apps/frontend/project.json',
@@ -142,7 +142,7 @@ describe('serve-local', () => {
         }),
       );
 
-      // Setup target project with non-continuous serve target
+      // Setup target project with non-continuous serve-local target
       tree.write(
         'apps/backend/project.json',
         JSON.stringify({
@@ -167,7 +167,7 @@ describe('serve-local', () => {
       expect(updatedProject).toBe(originalProject);
     });
 
-    it('should not modify project when target project has no serve target', async () => {
+    it('should not modify project when target project has no serve-local target', async () => {
       // Setup source project with serve-local target
       tree.write(
         'apps/frontend/project.json',
@@ -184,7 +184,7 @@ describe('serve-local', () => {
         }),
       );
 
-      // Setup target project without serve target
+      // Setup target project without serve-local target
       tree.write(
         'apps/backend/project.json',
         JSON.stringify({
@@ -225,7 +225,7 @@ describe('serve-local', () => {
         }),
       );
 
-      // Setup target project with continuous serve target
+      // Setup target project with continuous serve-local target
       tree.write(
         'apps/backend/project.json',
         JSON.stringify({
@@ -233,7 +233,7 @@ describe('serve-local', () => {
           root: 'apps/backend',
           sourceRoot: 'apps/backend/src',
           targets: {
-            serve: {
+            'serve-local': {
               executor: '@nx/node:execute',
               continuous: true,
               options: {},
@@ -267,7 +267,7 @@ describe('serve-local', () => {
         }),
       );
 
-      // Setup target project with continuous serve target
+      // Setup target project with continuous serve-local target
       tree.write(
         'apps/backend/project.json',
         JSON.stringify({
@@ -275,7 +275,7 @@ describe('serve-local', () => {
           root: 'apps/backend',
           sourceRoot: 'apps/backend/src',
           targets: {
-            serve: {
+            'serve-local': {
               executor: '@nx/node:execute',
               continuous: true,
               options: {},
@@ -327,7 +327,7 @@ const applyOverrides = (runtimeConfig: IRuntimeConfig) => {
         }),
       );
 
-      // Setup target project with continuous serve target
+      // Setup target project with continuous serve-local target
       tree.write(
         'apps/backend/project.json',
         JSON.stringify({
@@ -335,7 +335,7 @@ const applyOverrides = (runtimeConfig: IRuntimeConfig) => {
           root: 'apps/backend',
           sourceRoot: 'apps/backend/src',
           targets: {
-            serve: {
+            'serve-local': {
               executor: '@nx/node:execute',
               continuous: true,
               options: {},
@@ -366,7 +366,7 @@ const applyOverrides = (runtimeConfig: IRuntimeConfig) => {
         }),
       );
 
-      // Setup target project with continuous serve target
+      // Setup target project with continuous serve-local target
       tree.write(
         'apps/backend/project.json',
         JSON.stringify({
@@ -374,7 +374,7 @@ const applyOverrides = (runtimeConfig: IRuntimeConfig) => {
           root: 'apps/backend',
           sourceRoot: 'apps/backend/src',
           targets: {
-            serve: {
+            'serve-local': {
               executor: '@nx/node:execute',
               continuous: true,
               options: {},

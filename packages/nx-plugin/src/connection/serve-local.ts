@@ -36,22 +36,22 @@ export const addTargetToServeLocal = async (
     targetProjectName,
   );
 
-  // Target project must have a serve target which is continuous
+  // Target project must have a serve-local target which is continuous
   if (
     !(
-      targetProject.targets?.serve?.continuous &&
+      targetProject.targets?.['serve-local']?.continuous &&
       sourceProject.targets?.['serve-local']
     )
   ) {
     return;
   }
 
-  // Add a dependency on the serve target
+  // Add a dependency on the serve-local target
   sourceProject.targets['serve-local'].dependsOn = [
     ...(sourceProject.targets['serve-local'].dependsOn ?? []),
     {
       projects: [targetProject.name],
-      target: 'serve',
+      target: 'serve-local',
     },
     ...(options.additionalDependencyTargets ?? []),
   ];
