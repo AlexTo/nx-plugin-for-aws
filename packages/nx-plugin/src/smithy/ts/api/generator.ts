@@ -202,6 +202,16 @@ export const tsSmithyApiGenerator = async (
     dependsOn: ['copy-ssdk', 'watch-copy-ssdk'],
   };
 
+  backendProjectConfig.targets['serve-local'] = {
+    ...backendProjectConfig.targets.serve,
+    options: {
+      ...backendProjectConfig.targets.serve.options,
+      env: {
+        SERVE_LOCAL: 'true',
+      },
+    },
+  };
+
   // Ignore generated code
   updateGitIgnore(tree, backendProjectConfig.root, (patterns) => [
     ...patterns,

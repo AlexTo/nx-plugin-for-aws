@@ -346,6 +346,15 @@ describe('tsSmithyApiGenerator', () => {
       'tsx --watch src/local-server.ts',
     );
     expect(serveTarget.options.cwd).toBe('{projectRoot}');
+
+    const serveLocalTarget = backendProjectConfig.targets['serve-local'];
+    expect(serveLocalTarget.executor).toBe('nx:run-commands');
+    expect(serveLocalTarget.continuous).toBe(true);
+    expect(serveLocalTarget.options.command).toContain(
+      'tsx --watch src/local-server.ts',
+    );
+    expect(serveLocalTarget.options.cwd).toBe('{projectRoot}');
+    expect(serveLocalTarget.options.env).toEqual({ SERVE_LOCAL: 'true' });
   });
 
   it('should add dependencies to package.json', async () => {
