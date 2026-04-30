@@ -122,6 +122,16 @@ export async function tsTrpcApiGenerator(
     continuous: true,
   };
 
+  projectConfig.targets['serve-local'] = {
+    ...projectConfig.targets.serve,
+    options: {
+      ...projectConfig.targets.serve.options,
+      env: {
+        SERVE_LOCAL: 'true',
+      },
+    },
+  };
+
   await addTypeScriptBundleTarget(tree, projectConfig, {
     targetFilePath: 'src/handler.ts',
     external: [/@aws-sdk\/.*/], // lambda runtime provides aws sdk

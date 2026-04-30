@@ -199,6 +199,16 @@ describe('trpc backend generator', () => {
     expect(projectConfig.targets!.serve!.options!.commands).toEqual([
       'tsx --watch src/local-server.ts',
     ]);
+    expect(projectConfig.targets).toHaveProperty('serve-local');
+    expect(projectConfig.targets!['serve-local']!.executor).toBe(
+      'nx:run-commands',
+    );
+    expect(projectConfig.targets!['serve-local']!.options!.commands).toEqual([
+      'tsx --watch src/local-server.ts',
+    ]);
+    expect(projectConfig.targets!['serve-local']!.options!.env).toEqual({
+      SERVE_LOCAL: 'true',
+    });
   });
 
   it('should add rolldown bundle target', async () => {
