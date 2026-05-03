@@ -1,8 +1,12 @@
 ---
 title: "Agent TypeScript Strands vers Agent A2A"
 description: "Connecter un Agent TypeScript Strands à un agent A2A distant"
+when:
+  sourceType: ts#strands-agent
+  targetType:
+    - ts#strands-agent
+    - py#strands-agent
 ---
-
 import { FileTree } from '@astrojs/starlight/components';
 import Link from '@components/link.astro';
 import RunGenerator from '@components/run-generator.astro';
