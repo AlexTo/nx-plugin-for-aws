@@ -58,20 +58,24 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-该生成器会在 `common/terraform` 目录下创建用于部署函数的 Terraform 模块。您可以在 Terraform 配置中使用：
+该生成器会在 `common/terraform` 目录下创建用于部署函数的 Terraform 模块。每次部署实例化一次共享的 `core/asset-bucket` 模块，并将其 `bucket_name` 传递给 `asset_bucket_name` 输入：
 
-```hcl {2}
+```hcl
+module "asset_bucket" {
+  source = "../../common/terraform/src/core/asset-bucket"
+}
+
 module "my_project_my_function" {
   source = "../../common/terraform/src/app/lambda-functions/my-project-my-function"
 
-  # Lambda 函数的环境变量
+  asset_bucket_name = module.asset_bucket.bucket_name
+
   env = {
     SOME_VARIABLE = "some value"
   }
 
-  # 额外需要的 IAM 策略
   additional_iam_policy_statements = [
-    # 添加函数需要的其他权限
+    # Add any additional permissions your function needs
   ]
 }
 ```

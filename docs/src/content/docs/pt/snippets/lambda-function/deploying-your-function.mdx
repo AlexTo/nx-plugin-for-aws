@@ -58,20 +58,24 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-Este gerador cria um módulo Terraform para implantar sua função na pasta `common/terraform`. Você pode usar isso em uma configuração Terraform:
+Este gerador cria um módulo Terraform para implantar sua função na pasta `common/terraform`. Instancie o módulo compartilhado `core/asset-bucket` uma vez por implantação e passe seu `bucket_name` para a entrada `asset_bucket_name`:
 
-```hcl {2}
+```hcl
+module "asset_bucket" {
+  source = "../../common/terraform/src/core/asset-bucket"
+}
+
 module "my_project_my_function" {
   source = "../../common/terraform/src/app/lambda-functions/my-project-my-function"
 
-  # Variáveis de ambiente para a função Lambda
+  asset_bucket_name = module.asset_bucket.bucket_name
+
   env = {
     SOME_VARIABLE = "some value"
   }
 
-  # Políticas IAM adicionais se necessário
   additional_iam_policy_statements = [
-    # Adicione quaisquer permissões adicionais necessárias
+    # Add any additional permissions your function needs
   ]
 }
 ```

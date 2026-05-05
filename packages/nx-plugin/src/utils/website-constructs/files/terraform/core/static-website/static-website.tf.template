@@ -458,6 +458,13 @@ resource "aws_cloudfront_distribution" "website" {
       aws_wafv2_web_acl.cloudfront_waf
     ]
   }
+
+  # CloudFront validates access to the distribution logs bucket when it
+  # creates the distribution.
+  depends_on = [
+    aws_s3_bucket_acl.distribution_logs_acl,
+    aws_s3_bucket_policy.distribution_logs_ssl_policy,
+  ]
 }
 
 # S3 Bucket Policy for CloudFront OAC

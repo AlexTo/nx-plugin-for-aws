@@ -1,7 +1,6 @@
 ---
 title: "Déploiement d'Agent Bedrock"
 ---
-
 import Link from '@components/link.astro';
 import Infrastructure from '@components/infrastructure.astro';
 
@@ -32,13 +31,14 @@ Ce construct utilise le [module `@aws-cdk/aws-bedrock-agentcore-alpha`](https://
 <Fragment slot="terraform">
 Un module Terraform est généré pour vous, nommé en fonction du `name` que vous avez choisi lors de l'exécution du générateur, ou `<ProjectName>-agent` par défaut.
 
-Vous pouvez utiliser ce module terraform dans un projet Terraform :
+Transmettez les sorties du module partagé <Link path="/guides/runtime-config#writing-configuration">`runtime_config_appconfig`</Link> au module agent :
 
 ```terraform
-# Agent
 module "my_project_agent" {
-  # Relative path to the generated module in the common/terraform project
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 </Fragment>
@@ -94,11 +94,14 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-```terraform
+```terraform {5-6}
 # Agent
 module "my_project_agent" {
   # Relative path to the generated module in the common/terraform project
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 
@@ -146,13 +149,16 @@ Le construct `UserIdentity` peut être généré en utilisant le <Link path="/gu
 <Fragment slot="terraform">
 Le module généré accepte les variables `user_pool_id` et `user_pool_client_ids` pour l'authentification Cognito :
 
-```terraform
+```terraform {8-9}
 module "user_identity" {
   source = "../../common/terraform/src/core/user-identity"
 }
 
 module "my_project_agent" {
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 
   user_pool_id         = module.user_identity.user_pool_id
   user_pool_client_ids = [module.user_identity.user_pool_client_id]

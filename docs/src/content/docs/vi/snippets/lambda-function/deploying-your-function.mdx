@@ -56,18 +56,22 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-Generator này tạo ra một Terraform module để triển khai function của bạn trong thư mục `common/terraform`. Bạn có thể sử dụng nó trong cấu hình Terraform:
+Generator này tạo ra một Terraform module để triển khai function của bạn trong thư mục `common/terraform`. Khởi tạo module `core/asset-bucket` được chia sẻ một lần cho mỗi deployment và truyền `bucket_name` của nó vào input `asset_bucket_name`:
 
-```hcl {2}
+```hcl
+module "asset_bucket" {
+  source = "../../common/terraform/src/core/asset-bucket"
+}
+
 module "my_project_my_function" {
   source = "../../common/terraform/src/app/lambda-functions/my-project-my-function"
 
-  # Environment variables for the Lambda function
+  asset_bucket_name = module.asset_bucket.bucket_name
+
   env = {
     SOME_VARIABLE = "some value"
   }
 
-  # Additional IAM policies if needed
   additional_iam_policy_statements = [
     # Add any additional permissions your function needs
   ]

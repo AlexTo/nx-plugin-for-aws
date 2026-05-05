@@ -33,13 +33,14 @@ Ce construct utilise le [module `@aws-cdk/aws-bedrock-agentcore-alpha`](https://
 <Fragment slot="terraform">
 Un module Terraform est généré pour vous, nommé d'après le `name` choisi lors de l'exécution du générateur, ou `<ProjectName>-mcp-server` par défaut.
 
-Vous pouvez utiliser ce module Terraform dans un projet Terraform :
+Transmettez les sorties du module partagé <Link path="/guides/runtime-config#writing-configuration">`runtime_config_appconfig`</Link> au module du serveur MCP :
 
 ```terraform
-# Serveur MCP
 module "my_project_mcp_server" {
-  # Chemin relatif vers le module généré dans le projet common/terraform
   source = "../../common/terraform/src/app/mcp-servers/my-project-mcp-server"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 </Fragment>
@@ -89,11 +90,14 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-```terraform
+```terraform {5-6}
 # Serveur MCP
 module "my_project_mcp_server" {
   # Chemin relatif vers le module généré dans le projet common/terraform
   source = "../../common/terraform/src/app/mcp-servers/my-project-mcp-server"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 
@@ -141,13 +145,16 @@ Le construct `UserIdentity` peut être généré en utilisant le <Link path="/gu
 <Fragment slot="terraform">
 Le module généré accepte les variables `user_pool_id` et `user_pool_client_ids` pour l'authentification Cognito :
 
-```terraform
+```terraform {8-9}
 module "user_identity" {
   source = "../../common/terraform/src/core/user-identity"
 }
 
 module "my_project_mcp_server" {
   source = "../../common/terraform/src/app/mcp-servers/my-project-mcp-server"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 
   user_pool_id         = module.user_identity.user_pool_id
   user_pool_client_ids = [module.user_identity.user_pool_client_id]

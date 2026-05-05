@@ -58,20 +58,24 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-이 생성기는 `common/terraform` 폴더에 함수 배포를 위한 Terraform 모듈을 생성합니다. Terraform 구성에서 다음과 같이 사용할 수 있습니다:
+이 생성기는 `common/terraform` 폴더에 함수 배포를 위한 Terraform 모듈을 생성합니다. 배포당 한 번 공유 `core/asset-bucket` 모듈을 인스턴스화하고 `asset_bucket_name` 입력에 `bucket_name`을 전달하세요:
 
-```hcl {2}
+```hcl
+module "asset_bucket" {
+  source = "../../common/terraform/src/core/asset-bucket"
+}
+
 module "my_project_my_function" {
   source = "../../common/terraform/src/app/lambda-functions/my-project-my-function"
 
-  # Lambda 함수용 환경 변수
+  asset_bucket_name = module.asset_bucket.bucket_name
+
   env = {
     SOME_VARIABLE = "some value"
   }
 
-  # 추가 IAM 정책 필요시
   additional_iam_policy_statements = [
-    # 함수에 필요한 추가 권한 추가
+    # Add any additional permissions your function needs
   ]
 }
 ```

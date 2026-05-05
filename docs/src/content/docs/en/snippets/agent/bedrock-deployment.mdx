@@ -31,13 +31,14 @@ This construct uses the [`@aws-cdk/aws-bedrock-agentcore-alpha` module](https://
 <Fragment slot="terraform">
 A Terraform module is generated for you, named based on the `name` you chose when running the generator, or `<ProjectName>-agent` by default.
 
-You can use this terraform module in a Terraform project:
+Pass the shared <Link path="/guides/runtime-config#writing-configuration">`runtime_config_appconfig`</Link> module's outputs into the agent module:
 
 ```terraform
-# Agent
 module "my_project_agent" {
-  # Relative path to the generated module in the common/terraform project
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 </Fragment>
@@ -93,11 +94,14 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-```terraform
+```terraform {5-6}
 # Agent
 module "my_project_agent" {
   # Relative path to the generated module in the common/terraform project
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 
@@ -145,13 +149,16 @@ The `UserIdentity` construct can be generated using the <Link path="/guides/reac
 <Fragment slot="terraform">
 The generated module accepts `user_pool_id` and `user_pool_client_ids` variables for Cognito authentication:
 
-```terraform
+```terraform {8-9}
 module "user_identity" {
   source = "../../common/terraform/src/core/user-identity"
 }
 
 module "my_project_agent" {
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 
   user_pool_id         = module.user_identity.user_pool_id
   user_pool_client_ids = [module.user_identity.user_pool_client_id]

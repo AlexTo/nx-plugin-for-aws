@@ -32,13 +32,14 @@ export class ExampleStack extends Stack {
 <Fragment slot="terraform">
 系统会为您生成一个 Terraform 模块，其名称基于您运行生成器时选择的 `name`，或默认为 `<ProjectName>-agent`。
 
-您可以在 Terraform 项目中使用此 terraform 模块：
+将共享的 <Link path="/guides/runtime-config#writing-configuration">`runtime_config_appconfig`</Link> 模块的输出传递给代理模块：
 
 ```terraform
-# Agent
 module "my_project_agent" {
-  # Relative path to the generated module in the common/terraform project
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 </Fragment>
@@ -94,11 +95,14 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-```terraform
+```terraform {5-6}
 # Agent
 module "my_project_agent" {
   # Relative path to the generated module in the common/terraform project
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 
@@ -146,13 +150,16 @@ export class ExampleStack extends Stack {
 <Fragment slot="terraform">
 生成的模块接受 `user_pool_id` 和 `user_pool_client_ids` 变量用于 Cognito 身份验证：
 
-```terraform
+```terraform {8-9}
 module "user_identity" {
   source = "../../common/terraform/src/core/user-identity"
 }
 
 module "my_project_agent" {
   source = "../../common/terraform/src/app/agents/my-project-agent"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 
   user_pool_id         = module.user_identity.user_pool_id
   user_pool_client_ids = [module.user_identity.user_pool_client_id]

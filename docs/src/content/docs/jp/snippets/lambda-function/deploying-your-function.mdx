@@ -58,20 +58,24 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-このジェネレータは `common/terraform` フォルダに関数をデプロイするためのTerraformモジュールを作成します。Terraform設定で以下のように使用できます：
+このジェネレータは `common/terraform` フォルダに関数をデプロイするためのTerraformモジュールを作成します。デプロイごとに共有 `core/asset-bucket` モジュールを一度インスタンス化し、その `bucket_name` を `asset_bucket_name` 入力に渡します：
 
-```hcl {2}
+```hcl
+module "asset_bucket" {
+  source = "../../common/terraform/src/core/asset-bucket"
+}
+
 module "my_project_my_function" {
   source = "../../common/terraform/src/app/lambda-functions/my-project-my-function"
 
-  # Lambda関数の環境変数
+  asset_bucket_name = module.asset_bucket.bucket_name
+
   env = {
     SOME_VARIABLE = "some value"
   }
 
-  # 追加のIAMポリシーが必要な場合
   additional_iam_policy_statements = [
-    # 関数に必要な追加の権限を記述
+    # Add any additional permissions your function needs
   ]
 }
 ```

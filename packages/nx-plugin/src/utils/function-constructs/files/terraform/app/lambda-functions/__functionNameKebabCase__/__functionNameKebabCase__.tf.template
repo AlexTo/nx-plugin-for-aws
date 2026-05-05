@@ -1,3 +1,16 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
+  }
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
@@ -18,6 +31,11 @@ variable "additional_iam_policy_statements" {
     Resource = list(string)
   }))
   default = []
+}
+
+variable "asset_bucket_name" {
+  description = "Name of the shared asset S3 bucket used to stage the Lambda deployment zip. Instantiate the `core/asset-bucket` module once per deployment and pass its `bucket_name` output here."
+  type        = string
 }
 
 data "aws_caller_identity" "current" {}
@@ -100,19 +118,29 @@ data "archive_file" "lambda_zip" {
   output_path = "${path.module}/../../../../../../../dist/packages/common/terraform/lambda-functions/<%- functionNameKebabCase %>/lambda.zip"
 }
 
+resource "aws_s3_object" "lambda_zip" {
+  bucket      = var.asset_bucket_name
+  key         = "lambdas/<%- functionNameKebabCase %>/${data.archive_file.lambda_zip.output_base64sha256}.zip"
+  source      = data.archive_file.lambda_zip.output_path
+  source_hash = data.archive_file.lambda_zip.output_base64sha256
+  etag        = data.archive_file.lambda_zip.output_md5
+}
+
 resource "aws_lambda_function" "lambda_function" {
   #checkov:skip=CKV_AWS_117:Lambda function does not need to be in VPC for this use case
   #checkov:skip=CKV_AWS_116:Dead Letter Queue not required for this simple use case
   #checkov:skip=CKV_AWS_272:Code signing not required for this use case
   #checkov:skip=CKV_AWS_115:Concurrent execution limit not required for this use case
   #checkov:skip=CKV_AWS_173:Lambda environment variables encrypted by managed key
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "<%- functionNameKebabCase %>-${random_string.suffix.result}"
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "<%- handler %>"
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
-  runtime         = "<%- runtime %>"
-  timeout         = 30
+  s3_bucket         = aws_s3_object.lambda_zip.bucket
+  s3_key            = aws_s3_object.lambda_zip.key
+  s3_object_version = aws_s3_object.lambda_zip.version_id
+  function_name     = "<%- functionNameKebabCase %>-${random_string.suffix.result}"
+  role              = aws_iam_role.lambda_role.arn
+  handler           = "<%- handler %>"
+  source_code_hash  = data.archive_file.lambda_zip.output_base64sha256
+  runtime           = "<%- runtime %>"
+  timeout           = 30
 
   tracing_config {
     mode = "Active"

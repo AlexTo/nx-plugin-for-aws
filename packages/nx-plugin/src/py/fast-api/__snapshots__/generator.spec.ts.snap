@@ -2205,6 +2205,11 @@ variable "additional_iam_policy_statements" {
   default = []
 }
 
+variable "asset_bucket_name" {
+  description = "Name of the shared asset S3 bucket used to stage the Lambda deployment zip. Instantiate the \`core/asset-bucket\` module once per deployment and pass its \`bucket_name\` output here."
+  type        = string
+}
+
 # CORS Configuration (passed to core module)
 variable "cors_allow_credentials" {
   description = "Whether to allow credentials in CORS requests"
@@ -2253,6 +2258,12 @@ variable "tags" {
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 # Resources
 
 # Create Lambda ZIP file from the bundle directory
@@ -2262,12 +2273,20 @@ data "archive_file" "lambda_zip" {
   output_path = "\${path.module}/../../../../../../../dist/packages/common/terraform/apis/test-api/lambda.zip"
 }
 
+resource "aws_s3_object" "lambda_zip" {
+  bucket      = var.asset_bucket_name
+  key         = "apis/test-api/\${data.archive_file.lambda_zip.output_base64sha256}.zip"
+  source      = data.archive_file.lambda_zip.output_path
+  source_hash = data.archive_file.lambda_zip.output_base64sha256
+  etag        = data.archive_file.lambda_zip.output_md5
+}
+
 
 # Use the core HTTP API module
 module "http_api" {
   source = "../../../core/api/http-api"
 
-  api_name        = "TestApi"
+  api_name        = "TestApi-\${random_string.suffix.result}"
   api_description = "TestApi HTTP API"
   stage_name      = "$default"
   stage_auto_deploy = true
@@ -2292,8 +2311,10 @@ resource "aws_lambda_function" "api_lambda" {
   #checkov:skip=CKV_AWS_272:Code signing not required for this use case
   #checkov:skip=CKV_AWS_115:Concurrent execution limit not required for this use case
   #checkov:skip=CKV_AWS_173:Lambda environment variables encrypted by managed key
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "TestApiHandler"
+  s3_bucket         = aws_s3_object.lambda_zip.bucket
+  s3_key            = aws_s3_object.lambda_zip.key
+  s3_object_version = aws_s3_object.lambda_zip.version_id
+  function_name    = "TestApiHandler-\${random_string.suffix.result}"
   role            = aws_iam_role.lambda_execution_role.arn
   handler         = "run.sh"
   runtime         = "python3.14"
@@ -2327,7 +2348,7 @@ resource "aws_lambda_function" "api_lambda" {
 
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_execution_role" {
-  name = "TestApiHandler-execution-role"
+  name = "TestApiHandler-execution-role-\${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -2360,7 +2381,7 @@ resource "aws_iam_role_policy_attachment" "lambda_xray_execution" {
 # Additional IAM policies for Lambda (if provided)
 resource "aws_iam_role_policy" "lambda_additional_policies" {
   count = length(var.additional_iam_policy_statements) > 0 ? 1 : 0
-  name  = "TestApiHandler-additional-policies"
+  name  = "TestApiHandler-additional-policies-\${random_string.suffix.result}"
   role  = aws_iam_role.lambda_execution_role.id
 
   policy = jsonencode({
@@ -2374,7 +2395,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   #checkov:skip=CKV_AWS_158:Using default CloudWatch log encryption
   #checkov:skip=CKV_AWS_338:Log retention set to forever
   #checkov:skip=CKV_AWS_66:Log retention set to forever
-  name              = "/aws/lambda/TestApiHandler"
+  name              = "/aws/lambda/TestApiHandler-\${random_string.suffix.result}"
   tags              = var.tags
 }
 
@@ -2392,7 +2413,7 @@ resource "aws_apigatewayv2_authorizer" "cognito_authorizer" {
   api_id           = module.http_api.api_id
   authorizer_type  = "JWT"
   identity_sources = ["$request.header.Authorization"]
-  name             = "TestApiAuthorizer"
+  name             = "TestApiAuthorizer-\${random_string.suffix.result}"
 
   jwt_configuration {
     audience = var.user_pool_client_ids
@@ -2437,14 +2458,6 @@ module "add_url_to_runtime_config" {
   value     = { "TestApi" = module.http_api.stage_invoke_url }
 
   depends_on = [module.http_api]
-}
-
-module "appconfig" {
-  source = "../../../core/runtime-config/appconfig"
-
-  application_name = "TestApi-runtime-config"
-
-  depends_on = [module.add_url_to_runtime_config]
 }
 
 # Lambda permission for API Gateway to invoke the function via alias
@@ -2853,6 +2866,11 @@ variable "additional_iam_policy_statements" {
   default = []
 }
 
+variable "asset_bucket_name" {
+  description = "Name of the shared asset S3 bucket used to stage the Lambda deployment zip. Instantiate the \`core/asset-bucket\` module once per deployment and pass its \`bucket_name\` output here."
+  type        = string
+}
+
 # CORS Configuration (passed to core module)
 variable "cors_allow_credentials" {
   description = "Whether to allow credentials in CORS requests"
@@ -2901,6 +2919,12 @@ variable "tags" {
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 # Resources
 
 # Create Lambda ZIP file from the bundle directory
@@ -2910,12 +2934,20 @@ data "archive_file" "lambda_zip" {
   output_path = "\${path.module}/../../../../../../../dist/packages/common/terraform/apis/test-api/lambda.zip"
 }
 
+resource "aws_s3_object" "lambda_zip" {
+  bucket      = var.asset_bucket_name
+  key         = "apis/test-api/\${data.archive_file.lambda_zip.output_base64sha256}.zip"
+  source      = data.archive_file.lambda_zip.output_path
+  source_hash = data.archive_file.lambda_zip.output_base64sha256
+  etag        = data.archive_file.lambda_zip.output_md5
+}
+
 
 # Use the core HTTP API module
 module "http_api" {
   source = "../../../core/api/http-api"
 
-  api_name        = "TestApi"
+  api_name        = "TestApi-\${random_string.suffix.result}"
   api_description = "TestApi HTTP API"
   stage_name      = "$default"
   stage_auto_deploy = true
@@ -2940,8 +2972,10 @@ resource "aws_lambda_function" "api_lambda" {
   #checkov:skip=CKV_AWS_272:Code signing not required for this use case
   #checkov:skip=CKV_AWS_115:Concurrent execution limit not required for this use case
   #checkov:skip=CKV_AWS_173:Lambda environment variables encrypted by managed key
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "TestApiHandler"
+  s3_bucket         = aws_s3_object.lambda_zip.bucket
+  s3_key            = aws_s3_object.lambda_zip.key
+  s3_object_version = aws_s3_object.lambda_zip.version_id
+  function_name    = "TestApiHandler-\${random_string.suffix.result}"
   role            = aws_iam_role.lambda_execution_role.arn
   handler         = "run.sh"
   runtime         = "python3.14"
@@ -2975,7 +3009,7 @@ resource "aws_lambda_function" "api_lambda" {
 
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_execution_role" {
-  name = "TestApiHandler-execution-role"
+  name = "TestApiHandler-execution-role-\${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -3008,7 +3042,7 @@ resource "aws_iam_role_policy_attachment" "lambda_xray_execution" {
 # Additional IAM policies for Lambda (if provided)
 resource "aws_iam_role_policy" "lambda_additional_policies" {
   count = length(var.additional_iam_policy_statements) > 0 ? 1 : 0
-  name  = "TestApiHandler-additional-policies"
+  name  = "TestApiHandler-additional-policies-\${random_string.suffix.result}"
   role  = aws_iam_role.lambda_execution_role.id
 
   policy = jsonencode({
@@ -3022,7 +3056,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   #checkov:skip=CKV_AWS_158:Using default CloudWatch log encryption
   #checkov:skip=CKV_AWS_338:Log retention set to forever
   #checkov:skip=CKV_AWS_66:Log retention set to forever
-  name              = "/aws/lambda/TestApiHandler"
+  name              = "/aws/lambda/TestApiHandler-\${random_string.suffix.result}"
   tags              = var.tags
 }
 
@@ -3072,14 +3106,6 @@ module "add_url_to_runtime_config" {
   value     = { "TestApi" = module.http_api.stage_invoke_url }
 
   depends_on = [module.http_api]
-}
-
-module "appconfig" {
-  source = "../../../core/runtime-config/appconfig"
-
-  application_name = "TestApi-runtime-config"
-
-  depends_on = [module.add_url_to_runtime_config]
 }
 
 # Lambda permission for API Gateway to invoke the function via alias
@@ -3488,6 +3514,11 @@ variable "additional_iam_policy_statements" {
   default = []
 }
 
+variable "asset_bucket_name" {
+  description = "Name of the shared asset S3 bucket used to stage the Lambda deployment zip. Instantiate the \`core/asset-bucket\` module once per deployment and pass its \`bucket_name\` output here."
+  type        = string
+}
+
 # CORS Configuration (passed to core module)
 variable "cors_allow_credentials" {
   description = "Whether to allow credentials in CORS requests"
@@ -3536,6 +3567,12 @@ variable "tags" {
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 # Resources
 
 # Create Lambda ZIP file from the bundle directory
@@ -3545,12 +3582,20 @@ data "archive_file" "lambda_zip" {
   output_path = "\${path.module}/../../../../../../../dist/packages/common/terraform/apis/test-api/lambda.zip"
 }
 
+resource "aws_s3_object" "lambda_zip" {
+  bucket      = var.asset_bucket_name
+  key         = "apis/test-api/\${data.archive_file.lambda_zip.output_base64sha256}.zip"
+  source      = data.archive_file.lambda_zip.output_path
+  source_hash = data.archive_file.lambda_zip.output_base64sha256
+  etag        = data.archive_file.lambda_zip.output_md5
+}
+
 
 # Use the core HTTP API module
 module "http_api" {
   source = "../../../core/api/http-api"
 
-  api_name        = "TestApi"
+  api_name        = "TestApi-\${random_string.suffix.result}"
   api_description = "TestApi HTTP API"
   stage_name      = "$default"
   stage_auto_deploy = true
@@ -3575,8 +3620,10 @@ resource "aws_lambda_function" "api_lambda" {
   #checkov:skip=CKV_AWS_272:Code signing not required for this use case
   #checkov:skip=CKV_AWS_115:Concurrent execution limit not required for this use case
   #checkov:skip=CKV_AWS_173:Lambda environment variables encrypted by managed key
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "TestApiHandler"
+  s3_bucket         = aws_s3_object.lambda_zip.bucket
+  s3_key            = aws_s3_object.lambda_zip.key
+  s3_object_version = aws_s3_object.lambda_zip.version_id
+  function_name    = "TestApiHandler-\${random_string.suffix.result}"
   role            = aws_iam_role.lambda_execution_role.arn
   handler         = "run.sh"
   runtime         = "python3.14"
@@ -3610,7 +3657,7 @@ resource "aws_lambda_function" "api_lambda" {
 
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_execution_role" {
-  name = "TestApiHandler-execution-role"
+  name = "TestApiHandler-execution-role-\${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -3643,7 +3690,7 @@ resource "aws_iam_role_policy_attachment" "lambda_xray_execution" {
 # Additional IAM policies for Lambda (if provided)
 resource "aws_iam_role_policy" "lambda_additional_policies" {
   count = length(var.additional_iam_policy_statements) > 0 ? 1 : 0
-  name  = "TestApiHandler-additional-policies"
+  name  = "TestApiHandler-additional-policies-\${random_string.suffix.result}"
   role  = aws_iam_role.lambda_execution_role.id
 
   policy = jsonencode({
@@ -3657,7 +3704,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   #checkov:skip=CKV_AWS_158:Using default CloudWatch log encryption
   #checkov:skip=CKV_AWS_338:Log retention set to forever
   #checkov:skip=CKV_AWS_66:Log retention set to forever
-  name              = "/aws/lambda/TestApiHandler"
+  name              = "/aws/lambda/TestApiHandler-\${random_string.suffix.result}"
   tags              = var.tags
 }
 
@@ -3709,14 +3756,6 @@ module "add_url_to_runtime_config" {
   value     = { "TestApi" = module.http_api.stage_invoke_url }
 
   depends_on = [module.http_api]
-}
-
-module "appconfig" {
-  source = "../../../core/runtime-config/appconfig"
-
-  application_name = "TestApi-runtime-config"
-
-  depends_on = [module.add_url_to_runtime_config]
 }
 
 # Lambda permission for API Gateway to invoke the function via alias
@@ -4150,6 +4189,11 @@ variable "additional_iam_policy_statements" {
   default = []
 }
 
+variable "asset_bucket_name" {
+  description = "Name of the shared asset S3 bucket used to stage the Lambda deployment zip. Instantiate the \`core/asset-bucket\` module once per deployment and pass its \`bucket_name\` output here."
+  type        = string
+}
+
 # CORS Configuration (passed to core module)
 
 variable "cors_allow_headers" {
@@ -4188,20 +4232,34 @@ variable "tags" {
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 # Resources
 
-# Create Lambda ZIP file from the FastAPI bundle directory
+# Create Lambda ZIP file from the bundle directory
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "\${path.module}/../../../../../../../dist/apps/test_api/bundle-x86"
   output_path = "\${path.module}/../../../../../../../dist/packages/common/terraform/apis/test-api/lambda.zip"
 }
 
+resource "aws_s3_object" "lambda_zip" {
+  bucket      = var.asset_bucket_name
+  key         = "apis/test-api/\${data.archive_file.lambda_zip.output_base64sha256}.zip"
+  source      = data.archive_file.lambda_zip.output_path
+  source_hash = data.archive_file.lambda_zip.output_base64sha256
+  etag        = data.archive_file.lambda_zip.output_md5
+}
+
 # Use the core REST API module
 module "rest_api" {
   source = "../../../core/api/rest-api"
 
-  api_name        = "TestApi"
+  api_name        = "TestApi-\${random_string.suffix.result}"
   api_description = "TestApi REST API"
   stage_name      = "prod"
   stage_auto_deploy = true
@@ -4234,8 +4292,10 @@ resource "aws_lambda_function" "api_lambda" {
   #checkov:skip=CKV_AWS_272:Code signing not required for this use case
   #checkov:skip=CKV_AWS_115:Concurrent execution limit not required for this use case
   #checkov:skip=CKV_AWS_173:Lambda environment variables encrypted by managed key
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "TestApiHandler"
+  s3_bucket         = aws_s3_object.lambda_zip.bucket
+  s3_key            = aws_s3_object.lambda_zip.key
+  s3_object_version = aws_s3_object.lambda_zip.version_id
+  function_name    = "TestApiHandler-\${random_string.suffix.result}"
   role            = aws_iam_role.lambda_execution_role.arn
   handler         = "run.sh"
   runtime         = "python3.14"
@@ -4269,7 +4329,7 @@ resource "aws_lambda_function" "api_lambda" {
 
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_execution_role" {
-  name = "TestApiHandler-execution-role"
+  name = "TestApiHandler-execution-role-\${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -4302,7 +4362,7 @@ resource "aws_iam_role_policy_attachment" "lambda_xray_execution" {
 # Additional IAM policies for Lambda (if provided)
 resource "aws_iam_role_policy" "lambda_additional_policies" {
   count = length(var.additional_iam_policy_statements) > 0 ? 1 : 0
-  name  = "TestApiHandler-additional-policies"
+  name  = "TestApiHandler-additional-policies-\${random_string.suffix.result}"
   role  = aws_iam_role.lambda_execution_role.id
 
   policy = jsonencode({
@@ -4316,7 +4376,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   #checkov:skip=CKV_AWS_158:Using default CloudWatch log encryption
   #checkov:skip=CKV_AWS_338:Log retention set to forever
   #checkov:skip=CKV_AWS_66:Log retention set to forever
-  name              = "/aws/lambda/TestApiHandler"
+  name              = "/aws/lambda/TestApiHandler-\${random_string.suffix.result}"
   tags              = var.tags
 }
 
@@ -4331,7 +4391,7 @@ resource "aws_lambda_alias" "live" {
 
 # Cognito User Pool Authorizer
 resource "aws_api_gateway_authorizer" "cognito_authorizer" {
-  name                   = "TestApiAuthorizer"
+  name                   = "TestApiAuthorizer-\${random_string.suffix.result}"
   rest_api_id           = module.rest_api.api_id
   type                  = "COGNITO_USER_POOLS"
   provider_arns         = ["arn:aws:cognito-idp:\${data.aws_region.current.name}:\${data.aws_caller_identity.current.account_id}:userpool/\${var.user_pool_id}"]
@@ -4523,14 +4583,6 @@ module "add_url_to_runtime_config" {
   value     = { "TestApi" = aws_api_gateway_stage.api_stage.invoke_url }
 
   depends_on = [aws_api_gateway_stage.api_stage]
-}
-
-module "appconfig" {
-  source = "../../../core/runtime-config/appconfig"
-
-  application_name = "TestApi-runtime-config"
-
-  depends_on = [module.add_url_to_runtime_config]
 }
 
 # Outputs
@@ -4953,6 +5005,11 @@ variable "additional_iam_policy_statements" {
   default = []
 }
 
+variable "asset_bucket_name" {
+  description = "Name of the shared asset S3 bucket used to stage the Lambda deployment zip. Instantiate the \`core/asset-bucket\` module once per deployment and pass its \`bucket_name\` output here."
+  type        = string
+}
+
 # CORS Configuration (passed to core module)
 
 variable "cors_allow_headers" {
@@ -4991,20 +5048,34 @@ variable "tags" {
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 # Resources
 
-# Create Lambda ZIP file from the FastAPI bundle directory
+# Create Lambda ZIP file from the bundle directory
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "\${path.module}/../../../../../../../dist/apps/test_api/bundle-x86"
   output_path = "\${path.module}/../../../../../../../dist/packages/common/terraform/apis/test-api/lambda.zip"
 }
 
+resource "aws_s3_object" "lambda_zip" {
+  bucket      = var.asset_bucket_name
+  key         = "apis/test-api/\${data.archive_file.lambda_zip.output_base64sha256}.zip"
+  source      = data.archive_file.lambda_zip.output_path
+  source_hash = data.archive_file.lambda_zip.output_base64sha256
+  etag        = data.archive_file.lambda_zip.output_md5
+}
+
 # Use the core REST API module
 module "rest_api" {
   source = "../../../core/api/rest-api"
 
-  api_name        = "TestApi"
+  api_name        = "TestApi-\${random_string.suffix.result}"
   api_description = "TestApi REST API"
   stage_name      = "prod"
   stage_auto_deploy = true
@@ -5037,8 +5108,10 @@ resource "aws_lambda_function" "api_lambda" {
   #checkov:skip=CKV_AWS_272:Code signing not required for this use case
   #checkov:skip=CKV_AWS_115:Concurrent execution limit not required for this use case
   #checkov:skip=CKV_AWS_173:Lambda environment variables encrypted by managed key
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "TestApiHandler"
+  s3_bucket         = aws_s3_object.lambda_zip.bucket
+  s3_key            = aws_s3_object.lambda_zip.key
+  s3_object_version = aws_s3_object.lambda_zip.version_id
+  function_name    = "TestApiHandler-\${random_string.suffix.result}"
   role            = aws_iam_role.lambda_execution_role.arn
   handler         = "run.sh"
   runtime         = "python3.14"
@@ -5072,7 +5145,7 @@ resource "aws_lambda_function" "api_lambda" {
 
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_execution_role" {
-  name = "TestApiHandler-execution-role"
+  name = "TestApiHandler-execution-role-\${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -5105,7 +5178,7 @@ resource "aws_iam_role_policy_attachment" "lambda_xray_execution" {
 # Additional IAM policies for Lambda (if provided)
 resource "aws_iam_role_policy" "lambda_additional_policies" {
   count = length(var.additional_iam_policy_statements) > 0 ? 1 : 0
-  name  = "TestApiHandler-additional-policies"
+  name  = "TestApiHandler-additional-policies-\${random_string.suffix.result}"
   role  = aws_iam_role.lambda_execution_role.id
 
   policy = jsonencode({
@@ -5119,7 +5192,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   #checkov:skip=CKV_AWS_158:Using default CloudWatch log encryption
   #checkov:skip=CKV_AWS_338:Log retention set to forever
   #checkov:skip=CKV_AWS_66:Log retention set to forever
-  name              = "/aws/lambda/TestApiHandler"
+  name              = "/aws/lambda/TestApiHandler-\${random_string.suffix.result}"
   tags              = var.tags
 }
 
@@ -5328,14 +5401,6 @@ module "add_url_to_runtime_config" {
   value     = { "TestApi" = aws_api_gateway_stage.api_stage.invoke_url }
 
   depends_on = [aws_api_gateway_stage.api_stage]
-}
-
-module "appconfig" {
-  source = "../../../core/runtime-config/appconfig"
-
-  application_name = "TestApi-runtime-config"
-
-  depends_on = [module.add_url_to_runtime_config]
 }
 
 # Outputs
@@ -5758,6 +5823,11 @@ variable "additional_iam_policy_statements" {
   default = []
 }
 
+variable "asset_bucket_name" {
+  description = "Name of the shared asset S3 bucket used to stage the Lambda deployment zip. Instantiate the \`core/asset-bucket\` module once per deployment and pass its \`bucket_name\` output here."
+  type        = string
+}
+
 # CORS Configuration (passed to core module)
 
 variable "cors_allow_headers" {
@@ -5796,20 +5866,34 @@ variable "tags" {
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 # Resources
 
-# Create Lambda ZIP file from the FastAPI bundle directory
+# Create Lambda ZIP file from the bundle directory
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "\${path.module}/../../../../../../../dist/apps/test_api/bundle-x86"
   output_path = "\${path.module}/../../../../../../../dist/packages/common/terraform/apis/test-api/lambda.zip"
 }
 
+resource "aws_s3_object" "lambda_zip" {
+  bucket      = var.asset_bucket_name
+  key         = "apis/test-api/\${data.archive_file.lambda_zip.output_base64sha256}.zip"
+  source      = data.archive_file.lambda_zip.output_path
+  source_hash = data.archive_file.lambda_zip.output_base64sha256
+  etag        = data.archive_file.lambda_zip.output_md5
+}
+
 # Use the core REST API module
 module "rest_api" {
   source = "../../../core/api/rest-api"
 
-  api_name        = "TestApi"
+  api_name        = "TestApi-\${random_string.suffix.result}"
   api_description = "TestApi REST API"
   stage_name      = "prod"
   stage_auto_deploy = true
@@ -5842,8 +5926,10 @@ resource "aws_lambda_function" "api_lambda" {
   #checkov:skip=CKV_AWS_272:Code signing not required for this use case
   #checkov:skip=CKV_AWS_115:Concurrent execution limit not required for this use case
   #checkov:skip=CKV_AWS_173:Lambda environment variables encrypted by managed key
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "TestApiHandler"
+  s3_bucket         = aws_s3_object.lambda_zip.bucket
+  s3_key            = aws_s3_object.lambda_zip.key
+  s3_object_version = aws_s3_object.lambda_zip.version_id
+  function_name    = "TestApiHandler-\${random_string.suffix.result}"
   role            = aws_iam_role.lambda_execution_role.arn
   handler         = "run.sh"
   runtime         = "python3.14"
@@ -5877,7 +5963,7 @@ resource "aws_lambda_function" "api_lambda" {
 
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_execution_role" {
-  name = "TestApiHandler-execution-role"
+  name = "TestApiHandler-execution-role-\${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -5910,7 +5996,7 @@ resource "aws_iam_role_policy_attachment" "lambda_xray_execution" {
 # Additional IAM policies for Lambda (if provided)
 resource "aws_iam_role_policy" "lambda_additional_policies" {
   count = length(var.additional_iam_policy_statements) > 0 ? 1 : 0
-  name  = "TestApiHandler-additional-policies"
+  name  = "TestApiHandler-additional-policies-\${random_string.suffix.result}"
   role  = aws_iam_role.lambda_execution_role.id
 
   policy = jsonencode({
@@ -5924,7 +6010,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   #checkov:skip=CKV_AWS_158:Using default CloudWatch log encryption
   #checkov:skip=CKV_AWS_338:Log retention set to forever
   #checkov:skip=CKV_AWS_66:Log retention set to forever
-  name              = "/aws/lambda/TestApiHandler"
+  name              = "/aws/lambda/TestApiHandler-\${random_string.suffix.result}"
   tags              = var.tags
 }
 
@@ -6124,14 +6210,6 @@ module "add_url_to_runtime_config" {
   value     = { "TestApi" = aws_api_gateway_stage.api_stage.invoke_url }
 
   depends_on = [aws_api_gateway_stage.api_stage]
-}
-
-module "appconfig" {
-  source = "../../../core/runtime-config/appconfig"
-
-  application_name = "TestApi-runtime-config"
-
-  depends_on = [module.add_url_to_runtime_config]
 }
 
 # Outputs

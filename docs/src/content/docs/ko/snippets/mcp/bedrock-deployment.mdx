@@ -33,13 +33,14 @@ export class ExampleStack extends Stack {
 <Fragment slot="terraform">
 생성기 실행 시 선택한 `name`을 기반으로 Terraform 모듈이 생성되며, 기본값은 `<ProjectName>-mcp-server`입니다.
 
-이 Terraform 모듈을 Terraform 프로젝트에서 사용할 수 있습니다:
+공유 <Link path="/guides/runtime-config#writing-configuration">`runtime_config_appconfig`</Link> 모듈의 출력을 MCP 서버 모듈에 전달합니다:
 
 ```terraform
-# MCP 서버
 module "my_project_mcp_server" {
-  # common/terraform 프로젝트 내 생성된 모듈의 상대 경로
   source = "../../common/terraform/src/app/mcp-servers/my-project-mcp-server"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 </Fragment>
@@ -89,11 +90,14 @@ export class ExampleStack extends Stack {
 ```
 </Fragment>
 <Fragment slot="terraform">
-```terraform
+```terraform {5-6}
 # MCP 서버
 module "my_project_mcp_server" {
   # common/terraform 프로젝트 내 생성된 모듈의 상대 경로
   source = "../../common/terraform/src/app/mcp-servers/my-project-mcp-server"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 }
 ```
 
@@ -141,13 +145,16 @@ export class ExampleStack extends Stack {
 <Fragment slot="terraform">
 생성된 모듈은 Cognito 인증을 위한 `user_pool_id` 및 `user_pool_client_ids` 변수를 받습니다:
 
-```terraform
+```terraform {8-9}
 module "user_identity" {
   source = "../../common/terraform/src/core/user-identity"
 }
 
 module "my_project_mcp_server" {
   source = "../../common/terraform/src/app/mcp-servers/my-project-mcp-server"
+
+  appconfig_application_id  = module.runtime_config_appconfig.application_id
+  appconfig_application_arn = module.runtime_config_appconfig.application_arn
 
   user_pool_id         = module.user_identity.user_pool_id
   user_pool_client_ids = [module.user_identity.user_pool_client_id]
