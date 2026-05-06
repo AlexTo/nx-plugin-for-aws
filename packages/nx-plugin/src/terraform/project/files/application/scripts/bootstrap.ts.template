@@ -17,25 +17,19 @@ import {
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { resolveAwsConfig } from './aws-config';
 
-const requireEnv = (name: string): string => {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `${name} env var is required — run via the generated nx target so the {workspaceRoot}/{projectRoot} tokens are populated.`,
-    );
-  }
-  return value;
-};
-
-const workspaceRoot = resolve(requireEnv('WORKSPACE_ROOT'));
-// `PROJECT_ROOT` from nx is the workspace-relative path (e.g. `packages/infra`).
-const projectRootInput = requireEnv('PROJECT_ROOT');
-const projectRoot = resolve(workspaceRoot, projectRootInput);
+const projectRootRel = process.argv[2];
+if (!projectRootRel) {
+  throw new Error(
+    'Expected the project root as argv[2] — this script is wired up by the generated `bootstrap` nx target and should be invoked through it.',
+  );
+}
+const workspaceRoot = process.cwd();
+const projectRoot = resolve(workspaceRoot, projectRootRel);
 const bootstrapDir = join(projectRoot, 'bootstrap');
 const tfStatePath = join(
   workspaceRoot,
   'dist',
-  projectRootInput,
+  projectRootRel,
   'terraform',
   'bootstrap.tfstate',
 );

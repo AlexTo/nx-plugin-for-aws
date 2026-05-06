@@ -182,8 +182,8 @@ region      = "us-west-2"
             },
             "options": {
                 "forwardAllArgs": true,
-                "command": "tsx scripts/init.ts",
-                "cwd": "{projectRoot}"
+                "commands": ["tsx {projectRoot}/scripts/init.ts {projectRoot}"],
+                "cwd": "{workspaceRoot}"
             }
         },
         "plan": {

@@ -10,20 +10,13 @@ import { resolveAwsConfig } from './aws-config';
 
 const STATE_KEY_PREFIX = '<%- stateKeyPrefix %>';
 
-const requireEnv = (name: string): string => {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `${name} env var is required — run via the generated nx target so the {workspaceRoot}/{projectRoot} tokens are populated.`,
-    );
-  }
-  return value;
-};
-
-const workspaceRoot = resolve(requireEnv('WORKSPACE_ROOT'));
-// `PROJECT_ROOT` from nx is the workspace-relative path (e.g. `packages/infra`).
-const projectRoot = resolve(workspaceRoot, requireEnv('PROJECT_ROOT'));
-const srcDir = join(projectRoot, 'src');
+const projectRootRel = process.argv[2];
+if (!projectRootRel) {
+  throw new Error(
+    'Expected the project root as argv[2] — this script is wired up by the generated `init` nx target and should be invoked through it.',
+  );
+}
+const srcDir = join(resolve(process.cwd(), projectRootRel), 'src');
 
 const main = async () => {
   const { accountId, region } = await resolveAwsConfig();
@@ -39,7 +32,7 @@ const main = async () => {
       `-backend-config=region=${region}`,
       `-backend-config=bucket=${bucket}`,
       `-backend-config=key=${key}`,
-      ...process.argv.slice(2),
+      ...process.argv.slice(3),
     ],
     { cwd: srcDir, stdio: 'inherit' },
   );
