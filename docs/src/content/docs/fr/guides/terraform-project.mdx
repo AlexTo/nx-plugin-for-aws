@@ -48,6 +48,10 @@ Pour les projets d'application (`--type=application`), le générateur crée une
     - main.tf Bucket S3 et politiques de stockage d'état
     - providers.tf Configuration du provider AWS
     - variables.tf Définition des variables de bootstrap
+  - scripts Helpers Node exécutés par les cibles nx `bootstrap` et `init`
+    - aws-config.ts Résout le compte + région via la chaîne de credentials AWS SDK
+    - bootstrap.ts Récupère/pousse le tfstate de bootstrap et exécute `terraform apply`
+    - init.ts Exécute `terraform init` avec la configuration du backend S3
   - project.json Configuration du projet et cibles de build
 
 </FileTree>
@@ -170,15 +174,20 @@ region      = "us-west-2"
             "defaultConfiguration": "dev",
             "configurations": {
                 "dev": {
-                    "command": "terraform init -reconfigure -backend-config=\"region=$(aws configure get region)\" -backend-config=\"bucket=$(aws sts get-caller-identity --query Account --output text)-tf-state-$(aws configure get region)\" -backend-config=\"key=my-scope-my-project/dev/terraform.tfstate\""
+                    "env": { "TF_ENV": "dev" }
                 },
 +                "prod": {
-+                    "command": "terraform init -reconfigure -backend-config=\"region=$(aws configure get region)\" -backend-config=\"bucket=$(aws sts get-caller-identity --query Account --output text)-tf-state-$(aws configure get region)\" -backend-config=\"key=my-scope-my-project/prod/terraform.tfstate\""
++                    "env": { "TF_ENV": "prod" }
 +                }
             },
             "options": {
                 "forwardAllArgs": true,
-                "cwd": "{projectRoot}/src"
+                "command": "tsx scripts/init.ts",
+                "cwd": "{projectRoot}",
+                "env": {
+                    "WORKSPACE_ROOT": "{workspaceRoot}",
+                    "PROJECT_ROOT": "{projectRoot}"
+                }
             }
         },
         "plan": {

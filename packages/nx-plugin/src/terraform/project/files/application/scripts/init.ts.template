@@ -1,0 +1,51 @@
+/**
+ * Runs `terraform init` against the remote S3 backend, resolving the
+ * backend config (bucket + region + per-env state key) from the AWS
+ * SDK credential chain. Pass the environment name via the `TF_ENV`
+ * env var (defaults to `dev`).
+ */
+import { execFileSync } from 'node:child_process';
+import { join, resolve } from 'node:path';
+import { resolveAwsConfig } from './aws-config';
+
+const STATE_KEY_PREFIX = '<%- stateKeyPrefix %>';
+
+const requireEnv = (name: string): string => {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `${name} env var is required — run via the generated nx target so the {workspaceRoot}/{projectRoot} tokens are populated.`,
+    );
+  }
+  return value;
+};
+
+const workspaceRoot = resolve(requireEnv('WORKSPACE_ROOT'));
+// `PROJECT_ROOT` from nx is the workspace-relative path (e.g. `packages/infra`).
+const projectRoot = resolve(workspaceRoot, requireEnv('PROJECT_ROOT'));
+const srcDir = join(projectRoot, 'src');
+
+const main = async () => {
+  const { accountId, region } = await resolveAwsConfig();
+  const env = process.env.TF_ENV ?? 'dev';
+  const bucket = `${accountId}-tf-state-${region}`;
+  const key = `${STATE_KEY_PREFIX}/${env}/terraform.tfstate`;
+
+  execFileSync(
+    'terraform',
+    [
+      'init',
+      '-reconfigure',
+      `-backend-config=region=${region}`,
+      `-backend-config=bucket=${bucket}`,
+      `-backend-config=key=${key}`,
+      ...process.argv.slice(2),
+    ],
+    { cwd: srcDir, stdio: 'inherit' },
+  );
+};
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

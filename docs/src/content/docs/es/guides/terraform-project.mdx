@@ -49,6 +49,10 @@ Para proyectos de aplicación (`--type=application`), el generador crea una apli
     - main.tf Bucket S3 y políticas para almacenamiento de estado
     - providers.tf Configuración del proveedor AWS
     - variables.tf Definiciones de variables de bootstrap
+  - scripts Ayudantes Node ejecutados por los objetivos nx `bootstrap` e `init`
+    - aws-config.ts Resuelve cuenta + región a través de la cadena de credenciales del AWS SDK
+    - bootstrap.ts Extrae/empuja el tfstate de bootstrap y ejecuta `terraform apply`
+    - init.ts Ejecuta `terraform init` con la configuración del backend S3
   - project.json Configuración del proyecto y objetivos de construcción
 
 </FileTree>
@@ -171,15 +175,20 @@ region      = "us-west-2"
             "defaultConfiguration": "dev",
             "configurations": {
                 "dev": {
-                    "command": "terraform init -reconfigure -backend-config=\"region=$(aws configure get region)\" -backend-config=\"bucket=$(aws sts get-caller-identity --query Account --output text)-tf-state-$(aws configure get region)\" -backend-config=\"key=my-scope-my-project/dev/terraform.tfstate\""
+                    "env": { "TF_ENV": "dev" }
                 },
 +                "prod": {
-+                    "command": "terraform init -reconfigure -backend-config=\"region=$(aws configure get region)\" -backend-config=\"bucket=$(aws sts get-caller-identity --query Account --output text)-tf-state-$(aws configure get region)\" -backend-config=\"key=my-scope-my-project/prod/terraform.tfstate\""
++                    "env": { "TF_ENV": "prod" }
 +                }
             },
             "options": {
                 "forwardAllArgs": true,
-                "cwd": "{projectRoot}/src"
+                "command": "tsx scripts/init.ts",
+                "cwd": "{projectRoot}",
+                "env": {
+                    "WORKSPACE_ROOT": "{workspaceRoot}",
+                    "PROJECT_ROOT": "{projectRoot}"
+                }
             }
         },
         "plan": {
