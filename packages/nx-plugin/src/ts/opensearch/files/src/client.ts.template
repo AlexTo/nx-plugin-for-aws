@@ -1,0 +1,51 @@
+import { Client } from '@opensearch-project/opensearch';
+import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
+import { PACKAGE_NAME, LOCAL_ENDPOINT } from './constants.js';
+
+type OpenSearchConfig = {
+  collectionEndpoint: string;
+};
+
+let _client: Client | undefined;
+let _clientEndpoint: string | undefined;
+
+export const getOpenSearchClient = async (): Promise<Client> => {
+  const endpoint =
+    process.env.SERVE_LOCAL === 'true'
+      ? LOCAL_ENDPOINT
+      : await resolveOpenSearchEndpoint();
+  if (_client === undefined || _clientEndpoint !== endpoint) {
+    _clientEndpoint = endpoint;
+    _client = new Client({ node: endpoint });
+  }
+  return _client;
+};
+
+let _collectionEndpoint: string | undefined;
+
+export const resolveOpenSearchEndpoint = async (): Promise<string> => {
+  if (process.env.SERVE_LOCAL === 'true') {
+    return LOCAL_ENDPOINT;
+  }
+  if (_collectionEndpoint === undefined) {
+    const appId = process.env.RUNTIME_CONFIG_APP_ID;
+    if (!appId) {
+      throw new Error('RUNTIME_CONFIG_APP_ID environment variable is not set');
+    }
+    const config = await getAppConfig<{
+      [key: string]: OpenSearchConfig | undefined;
+    }>('opensearch', {
+      application: appId,
+      environment: 'default',
+      transform: 'json',
+    });
+    const collectionEndpoint = config?.[PACKAGE_NAME]?.collectionEndpoint;
+    if (!collectionEndpoint) {
+      throw new Error(
+        'Could not resolve OpenSearch collection endpoint from runtime config',
+      );
+    }
+    _collectionEndpoint = collectionEndpoint;
+  }
+  return _collectionEndpoint!;
+};

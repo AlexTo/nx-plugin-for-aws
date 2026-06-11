@@ -1,0 +1,74 @@
+terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+
+variable "collection_name" {
+  description = "Name of the OpenSearch Serverless collection (3-32 lowercase alphanumeric characters or hyphens)."
+  type        = string
+}
+
+variable "collection_type" {
+  description = "Type of the OpenSearch Serverless collection: SEARCH, TIMESERIES, or VECTORSEARCH."
+  type        = string
+  default     = "SEARCH"
+}
+
+resource "aws_opensearchserverless_encryption_policy" "policy" {
+  name = "${var.collection_name}-encryption-policy"
+  type = "encryption"
+
+  policy = jsonencode({
+    Rules = [
+      {
+        Resource     = ["collection/${var.collection_name}"]
+        ResourceType = "collection"
+      }
+    ]
+    AWSOwnedKey = true
+  })
+}
+
+# Default network policy allows public access. Restrict this to a VPC
+# endpoint by replacing AllowFromPublic with an AllowVpcEndpointId entry.
+resource "aws_opensearchserverless_network_policy" "policy" {
+  name = "${var.collection_name}-network-policy"
+  type = "network"
+
+  policy = jsonencode([{
+    Rules = [
+      {
+        Resource     = ["collection/${var.collection_name}"]
+        ResourceType = "collection"
+      },
+      {
+        Resource     = ["collection/${var.collection_name}"]
+        ResourceType = "dashboard"
+      }
+    ]
+    AllowFromPublic = true
+  }])
+}
+
+resource "aws_opensearchserverless_collection" "collection" {
+  name = var.collection_name
+  type = var.collection_type
+
+  depends_on = [aws_opensearchserverless_encryption_policy.policy]
+}
+
+output "collection_endpoint" {
+  description = "Endpoint of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.collection_endpoint
+}
+
+output "collection_arn" {
+  description = "ARN of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.arn
+}

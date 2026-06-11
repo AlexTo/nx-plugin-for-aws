@@ -1,0 +1,30 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+
+variable "collection_type" {
+  description = "Type of the OpenSearch Serverless collection: SEARCH, TIMESERIES, or VECTORSEARCH."
+  type        = string
+  default     = "SEARCH"
+}
+
+module "opensearch_collection" {
+  source          = "../../../core/opensearch/serverless"
+  collection_name = "<%= nameKebabCase %>"
+  collection_type = var.collection_type
+}
+
+module "add_to_runtime_config" {
+  source = "../../../core/runtime-config/entry"
+
+  namespace = "opensearch"
+  key       = "<%= nameClassName %>"
+  value = {
+    collectionEndpoint = module.opensearch_collection.collection_endpoint
+  }
+}

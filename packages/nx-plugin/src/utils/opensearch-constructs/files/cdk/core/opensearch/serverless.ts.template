@@ -1,0 +1,233 @@
+import { Lazy, Names } from "aws-cdk-lib";
+import { Grant, IGrantable } from "aws-cdk-lib/aws-iam";
+import { Key } from "aws-cdk-lib/aws-kms";
+import { Construct } from "constructs";
+import {
+  CfnAccessPolicy,
+  CfnCollection,
+  CfnCollectionProps,
+  CfnEncryptionPolicy,
+  CfnNetworkPolicy,
+} from "aws-cdk-lib/aws-opensearchserverless";
+import { RuntimeConfig } from "../runtime-config.js";
+
+export type CollectionType = "SEARCH" | "TIMESERIES" | "VECTORSEARCH";
+
+type _CollectionProps = Omit<CfnCollectionProps, "name" | "type">;
+
+export interface OpenSearchServerlessCollectionProps extends _CollectionProps {
+  /**
+   * RuntimeConfig key used under the `opensearch` namespace.
+   */
+  readonly runtimeConfigKey: string;
+
+  /**
+   * The type of collection.
+   *
+   * @default 'SEARCH'
+   */
+  readonly type?: CollectionType;
+
+  /**
+   * Whether to enable automatic key rotation on the KMS encryption key.
+   *
+   * @default true
+   */
+  readonly enableKeyRotation?: boolean;
+
+  /**
+   * Whether to allow public access to the collection endpoint.
+   * Set to false and provide sourceVPCEs or sourceServices to restrict access.
+   *
+   * @default true
+   */
+  readonly allowFromPublic?: boolean;
+
+  /**
+   * VPC endpoint IDs allowed to access the collection.
+   * Only applies when allowFromPublic is false.
+   */
+  readonly sourceVPCEs?: string[];
+
+  /**
+   * AWS service principals allowed to access the collection (e.g. 'bedrock.amazonaws.com').
+   * Only applies when allowFromPublic is false.
+   */
+  readonly sourceServices?: string[];
+}
+
+export abstract class OpenSearchServerlessCollection extends Construct {
+  public readonly encryptionKey: Key;
+  public readonly collection: CfnCollection;
+  public readonly encryptionPolicy: CfnEncryptionPolicy;
+  public readonly networkPolicy: CfnNetworkPolicy;
+  public readonly dataAccessPolicy: CfnAccessPolicy;
+
+  private readonly readWritePrincipals: string[] = [];
+  private readonly readPrincipals: string[] = [];
+
+  constructor(
+    scope: Construct,
+    id: string,
+    {
+      runtimeConfigKey,
+      type = "SEARCH",
+      enableKeyRotation = true,
+      allowFromPublic = true,
+      sourceVPCEs,
+      sourceServices,
+      ...rest
+    }: OpenSearchServerlessCollectionProps,
+  ) {
+    super(scope, id);
+
+    const collectionName = Names.uniqueResourceName(this, {
+      maxLength: 32,
+      allowedSpecialCharacters: "-",
+    }).toLowerCase();
+
+    this.encryptionKey = new Key(this, "EncryptionKey", { enableKeyRotation });
+
+    this.encryptionPolicy = new CfnEncryptionPolicy(this, "EncryptionPolicy", {
+      name: `${collectionName}-encryption-policy`,
+      type: "encryption",
+      policy: JSON.stringify({
+        Rules: [
+          {
+            Resource: [`collection/${collectionName}`],
+            ResourceType: "collection",
+          },
+        ],
+        KmsARN: this.encryptionKey.keyArn,
+      }),
+    });
+
+    this.networkPolicy = new CfnNetworkPolicy(this, "NetworkPolicy", {
+      name: `${collectionName}-network-policy`,
+      type: "network",
+      policy: JSON.stringify([
+        {
+          Rules: [
+            {
+              Resource: [`collection/${collectionName}`],
+              ResourceType: "collection",
+            },
+            {
+              Resource: [`collection/${collectionName}`],
+              ResourceType: "dashboard",
+            },
+          ],
+          AllowFromPublic: allowFromPublic,
+          ...(sourceVPCEs && { SourceVPCEs: sourceVPCEs }),
+          ...(sourceServices && { SourceServices: sourceServices }),
+        },
+      ]),
+    });
+
+    this.collection = new CfnCollection(this, runtimeConfigKey, {
+      ...rest,
+      name: collectionName,
+      type,
+    });
+
+    this.dataAccessPolicy = new CfnAccessPolicy(this, "DataAccessPolicy", {
+      name: `${collectionName}-data-access-policy`,
+      type: "data",
+      policy: Lazy.string({
+        produce: () => {
+          const entries = [];
+          if (this.readWritePrincipals.length > 0) {
+            entries.push({
+              Rules: [
+                {
+                  Resource: [`collection/${collectionName}`],
+                  Permission: [
+                    "aoss:CreateCollectionItems",
+                    "aoss:DeleteCollectionItems",
+                    "aoss:UpdateCollectionItems",
+                    "aoss:DescribeCollectionItems",
+                  ],
+                  ResourceType: "collection",
+                },
+                {
+                  Resource: [`index/${collectionName}/*`],
+                  Permission: [
+                    "aoss:CreateIndex",
+                    "aoss:DeleteIndex",
+                    "aoss:UpdateIndex",
+                    "aoss:DescribeIndex",
+                    "aoss:ReadDocument",
+                    "aoss:WriteDocument",
+                  ],
+                  ResourceType: "index",
+                },
+              ],
+              Principal: this.readWritePrincipals,
+            });
+          }
+          if (this.readPrincipals.length > 0) {
+            entries.push({
+              Rules: [
+                {
+                  Resource: [`collection/${collectionName}`],
+                  Permission: ["aoss:DescribeCollectionItems"],
+                  ResourceType: "collection",
+                },
+                {
+                  Resource: [`index/${collectionName}/*`],
+                  Permission: ["aoss:DescribeIndex", "aoss:ReadDocument"],
+                  ResourceType: "index",
+                },
+              ],
+              Principal: this.readPrincipals,
+            });
+          }
+          return JSON.stringify(entries);
+        },
+      }),
+    });
+
+    this.collection.addDependency(this.encryptionPolicy);
+    this.collection.addDependency(this.networkPolicy);
+    this.collection.addDependency(this.dataAccessPolicy);
+
+    const rc = RuntimeConfig.ensure(this);
+    rc.set("opensearch", runtimeConfigKey, {
+      collectionEndpoint: this.collection.attrCollectionEndpoint,
+    });
+  }
+
+  /**
+   * Grants full read/write data access to the collection for the given principal.
+   * Adds `aoss:APIAccessAll` to the principal's IAM policy and registers the
+   * principal in the collection's data access policy.
+   */
+  public grantReadWriteData(grantable: IGrantable): void {
+    Grant.addToPrincipal({
+      grantee: grantable,
+      actions: ["aoss:APIAccessAll"],
+      resourceArns: [this.collection.attrArn],
+      scope: this,
+    });
+    this.readWritePrincipals.push(
+      ...(grantable.grantPrincipal.policyFragment.principalJson["AWS"] ?? []),
+    );
+  }
+
+  /**
+   * Grants read-only data access to the collection for the given principal.
+   * Adds `aoss:APIAccessAll` to the principal's IAM policy and registers the
+   * principal in the collection's data access policy with read-only permissions.
+   */
+  public grantReadData(grantable: IGrantable): void {
+    Grant.addToPrincipal({
+      grantee: grantable,
+      actions: ["aoss:APIAccessAll"],
+      resourceArns: [this.collection.attrArn],
+      scope: this,
+    });
+    this.readPrincipals.push(
+      ...(grantable.grantPrincipal.policyFragment.principalJson["AWS"] ?? []),
+    );
+  }
+}

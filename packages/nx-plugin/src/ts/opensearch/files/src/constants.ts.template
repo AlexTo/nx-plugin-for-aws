@@ -1,0 +1,5 @@
+export const PACKAGE_NAME = '<%= runtimeConfigKey %>';
+
+// Local development connection details (used when SERVE_LOCAL=true, see serve-local Nx target)
+export const LOCAL_PORT = <%= localOpenSearchPort %>;
+export const LOCAL_ENDPOINT = `http://localhost:${LOCAL_PORT}`;

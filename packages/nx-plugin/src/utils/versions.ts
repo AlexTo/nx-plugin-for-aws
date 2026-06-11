@@ -10,6 +10,7 @@ export const TS_VERSIONS = {
   '@a2a-js/sdk': '0.3.13',
   '@aws/aws-distro-opentelemetry-node-autoinstrumentation': '0.11.0',
   '@aws-sdk/client-dynamodb': '3.1063.0',
+  '@opensearch-project/opensearch': '3.6.0',
   '@aws-sdk/client-bedrock-runtime': '3.1063.0',
   '@aws-sdk/client-s3': '3.1063.0',
   '@aws-sdk/client-sts': '3.1063.0',

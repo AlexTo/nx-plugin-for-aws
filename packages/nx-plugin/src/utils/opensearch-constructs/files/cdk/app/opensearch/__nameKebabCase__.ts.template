@@ -1,0 +1,20 @@
+import { Construct } from 'constructs';
+import { PACKAGE_NAME } from '<%= openSearchPackageAlias %>';
+import {
+  OpenSearchServerlessCollection,
+  OpenSearchServerlessCollectionProps,
+} from '../../core/opensearch/serverless.js';
+
+export type <%= nameClassName %>Props = Omit<
+  OpenSearchServerlessCollectionProps,
+  'runtimeConfigKey'
+>;
+
+export class <%= nameClassName %> extends OpenSearchServerlessCollection {
+  constructor(scope: Construct, id: string, props?: <%= nameClassName %>Props) {
+    super(scope, id, {
+      ...props,
+      runtimeConfigKey: PACKAGE_NAME,
+    });
+  }
+}

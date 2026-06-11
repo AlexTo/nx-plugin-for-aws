@@ -1,0 +1,2 @@
+export { PACKAGE_NAME, LOCAL_ENDPOINT } from './constants.js';
+export { getOpenSearchClient, resolveOpenSearchEndpoint } from './client.js';

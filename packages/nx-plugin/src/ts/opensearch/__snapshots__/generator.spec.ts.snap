@@ -1,0 +1,893 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ts#opensearch generator > should generate scripts for finch engine > packages/my-search/scripts/pull-image.ts 1`] = `
+"import { spawnSync } from 'child_process';
+
+const ENGINE = 'finch';
+const image = process.argv[2];
+
+const inspect = spawnSync(ENGINE, ['image', 'inspect', image], {
+  stdio: 'ignore',
+});
+
+if (inspect.status !== 0) {
+  const pull = spawnSync(ENGINE, ['pull', image], { stdio: 'inherit' });
+  if (pull.status !== 0) {
+    process.exit(pull.status ?? 1);
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate scripts for finch engine > packages/my-search/scripts/start-container.ts 1`] = `
+"import { spawn, spawnSync } from 'child_process';
+
+const ENGINE = 'finch';
+
+const [containerName, image, hostPort] = process.argv.slice(2);
+
+const containerExists = (): boolean =>
+  spawnSync(ENGINE, ['container', 'inspect', containerName], {
+    stdio: 'ignore',
+  }).status === 0;
+
+const isRunning = (): boolean => {
+  const result = spawnSync(
+    ENGINE,
+    ['container', 'inspect', '-f', '{{.State.Running}}', containerName],
+    { encoding: 'utf-8' },
+  );
+  return result.status === 0 && result.stdout.trim() === 'true';
+};
+
+// Multiple opensearch packages run serve-local in parallel sharing the same
+// container. All processes stream logs, but only the one that created the
+// container stops it on exit — others just detach.
+let created = false;
+let runRetries = 0;
+
+for (;;) {
+  if (containerExists()) {
+    if (!isRunning()) {
+      const start = spawnSync(ENGINE, ['start', containerName], {
+        stdio: 'inherit',
+      });
+      if (start.status !== 0) process.exit(start.status ?? 1);
+    }
+    break;
+  }
+  const runArgs = (
+    \`run --name \${containerName}\` +
+    \` -e discovery.type=single-node\` +
+    \` -e DISABLE_SECURITY_PLUGIN=true\` +
+    \` -p \${hostPort}:9200\` +
+    \` -v \${containerName}-data:/usr/share/opensearch/data\` +
+    \` -d \${image}\`
+  ).split(' ');
+  const create = spawnSync(ENGINE, runArgs, { stdio: 'pipe' });
+  if (create.status === 0) {
+    created = true;
+    break;
+  }
+  if (!containerExists() && ++runRetries > 3) {
+    process.stderr.write(create.stderr);
+    process.exit(create.status ?? 1);
+  }
+}
+
+const logs = spawn(ENGINE, ['logs', '-f', containerName], {
+  stdio: ['ignore', 'inherit', 'inherit'],
+});
+
+let exiting = false;
+
+const cleanup = () => {
+  if (exiting) return;
+  exiting = true;
+  if (created) {
+    spawnSync(ENGINE, ['rm', '-f', containerName], { stdio: 'ignore' });
+  }
+  logs.kill();
+  process.exit(0);
+};
+
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+process.on('SIGHUP', cleanup);
+
+logs.on('exit', (code) => {
+  if (!exiting) process.exit(code ?? 0);
+});
+"
+`;
+
+exports[`ts#opensearch generator > should generate scripts for finch engine > packages/my-search/scripts/wait-for-opensearch.ts 1`] = `
+"const [port] = process.argv.slice(2);
+const url = \`http://localhost:\${port}/_cluster/health\`;
+
+const MAX_ATTEMPTS = 60;
+const RETRY_DELAY_MS = 2000;
+
+for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const body = await res.json();
+      if (body.status === 'green' || body.status === 'yellow') {
+        console.log(\`OpenSearch is ready (status: \${body.status})\`);
+        process.exit(0);
+      }
+    }
+  } catch {
+    // not ready yet
+  }
+  if (attempt < MAX_ATTEMPTS) {
+    console.log(
+      \`Waiting for OpenSearch... (attempt \${attempt}/\${MAX_ATTEMPTS})\`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  }
+}
+
+console.error(\`OpenSearch did not become ready after \${MAX_ATTEMPTS} attempts\`);
+process.exit(1);
+"
+`;
+
+exports[`ts#opensearch generator > should generate terraform modules when iac is terraform 1`] = `
+"terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+
+variable "collection_name" {
+  description = "Name of the OpenSearch Serverless collection (3-32 lowercase alphanumeric characters or hyphens)."
+  type        = string
+}
+
+variable "collection_type" {
+  description = "Type of the OpenSearch Serverless collection: SEARCH, TIMESERIES, or VECTORSEARCH."
+  type        = string
+  default     = "SEARCH"
+}
+
+resource "aws_opensearchserverless_encryption_policy" "policy" {
+  name = "\${var.collection_name}-encryption-policy"
+  type = "encryption"
+
+  policy = jsonencode({
+    Rules = [
+      {
+        Resource     = ["collection/\${var.collection_name}"]
+        ResourceType = "collection"
+      }
+    ]
+    AWSOwnedKey = true
+  })
+}
+
+# Default network policy allows public access. Restrict this to a VPC
+# endpoint by replacing AllowFromPublic with an AllowVpcEndpointId entry.
+resource "aws_opensearchserverless_network_policy" "policy" {
+  name = "\${var.collection_name}-network-policy"
+  type = "network"
+
+  policy = jsonencode([{
+    Rules = [
+      {
+        Resource     = ["collection/\${var.collection_name}"]
+        ResourceType = "collection"
+      },
+      {
+        Resource     = ["collection/\${var.collection_name}"]
+        ResourceType = "dashboard"
+      }
+    ]
+    AllowFromPublic = true
+  }])
+}
+
+resource "aws_opensearchserverless_collection" "collection" {
+  name = var.collection_name
+  type = var.collection_type
+
+  depends_on = [aws_opensearchserverless_encryption_policy.policy]
+}
+
+output "collection_endpoint" {
+  description = "Endpoint of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.collection_endpoint
+}
+
+output "collection_arn" {
+  description = "ARN of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.arn
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate terraform modules when iac is terraform 2`] = `
+"terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+
+variable "collection_type" {
+  description = "Type of the OpenSearch Serverless collection: SEARCH, TIMESERIES, or VECTORSEARCH."
+  type        = string
+  default     = "SEARCH"
+}
+
+module "opensearch_collection" {
+  source          = "../../../core/opensearch/serverless"
+  collection_name = "my-search"
+  collection_type = var.collection_type
+}
+
+module "add_to_runtime_config" {
+  source = "../../../core/runtime-config/entry"
+
+  namespace = "opensearch"
+  key       = "MySearch"
+  value = {
+    collectionEndpoint = module.opensearch_collection.collection_endpoint
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/scripts/pull-image.ts 1`] = `
+"import { spawnSync } from 'child_process';
+
+const ENGINE = 'docker';
+const image = process.argv[2];
+
+const inspect = spawnSync(ENGINE, ['image', 'inspect', image], {
+  stdio: 'ignore',
+});
+
+if (inspect.status !== 0) {
+  const pull = spawnSync(ENGINE, ['pull', image], { stdio: 'inherit' });
+  if (pull.status !== 0) {
+    process.exit(pull.status ?? 1);
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/scripts/start-container.ts 1`] = `
+"import { spawn, spawnSync } from 'child_process';
+
+const ENGINE = 'docker';
+
+const [containerName, image, hostPort] = process.argv.slice(2);
+
+const containerExists = (): boolean =>
+  spawnSync(ENGINE, ['container', 'inspect', containerName], {
+    stdio: 'ignore',
+  }).status === 0;
+
+const isRunning = (): boolean => {
+  const result = spawnSync(
+    ENGINE,
+    ['container', 'inspect', '-f', '{{.State.Running}}', containerName],
+    { encoding: 'utf-8' },
+  );
+  return result.status === 0 && result.stdout.trim() === 'true';
+};
+
+// Multiple opensearch packages run serve-local in parallel sharing the same
+// container. All processes stream logs, but only the one that created the
+// container stops it on exit — others just detach.
+let created = false;
+let runRetries = 0;
+
+for (;;) {
+  if (containerExists()) {
+    if (!isRunning()) {
+      const start = spawnSync(ENGINE, ['start', containerName], {
+        stdio: 'inherit',
+      });
+      if (start.status !== 0) process.exit(start.status ?? 1);
+    }
+    break;
+  }
+  const runArgs = (
+    \`run --rm --name \${containerName}\` +
+    \` -e discovery.type=single-node\` +
+    \` -e DISABLE_SECURITY_PLUGIN=true\` +
+    \` -p \${hostPort}:9200\` +
+    \` -v \${containerName}-data:/usr/share/opensearch/data\` +
+    \` -d \${image}\`
+  ).split(' ');
+  const create = spawnSync(ENGINE, runArgs, { stdio: 'pipe' });
+  if (create.status === 0) {
+    created = true;
+    break;
+  }
+  if (!containerExists() && ++runRetries > 3) {
+    process.stderr.write(create.stderr);
+    process.exit(create.status ?? 1);
+  }
+}
+
+const logs = spawn(ENGINE, ['logs', '-f', containerName], {
+  stdio: ['ignore', 'inherit', 'inherit'],
+});
+
+let exiting = false;
+
+const cleanup = () => {
+  if (exiting) return;
+  exiting = true;
+  if (created) {
+    spawnSync(ENGINE, ['stop', containerName], { stdio: 'ignore' });
+  }
+  logs.kill();
+  process.exit(0);
+};
+
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+process.on('SIGHUP', cleanup);
+
+logs.on('exit', (code) => {
+  if (!exiting) process.exit(code ?? 0);
+});
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/scripts/wait-for-opensearch.ts 1`] = `
+"const [port] = process.argv.slice(2);
+const url = \`http://localhost:\${port}/_cluster/health\`;
+
+const MAX_ATTEMPTS = 60;
+const RETRY_DELAY_MS = 2000;
+
+for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const body = await res.json();
+      if (body.status === 'green' || body.status === 'yellow') {
+        console.log(\`OpenSearch is ready (status: \${body.status})\`);
+        process.exit(0);
+      }
+    }
+  } catch {
+    // not ready yet
+  }
+  if (attempt < MAX_ATTEMPTS) {
+    console.log(
+      \`Waiting for OpenSearch... (attempt \${attempt}/\${MAX_ATTEMPTS})\`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  }
+}
+
+console.error(\`OpenSearch did not become ready after \${MAX_ATTEMPTS} attempts\`);
+process.exit(1);
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/src/client.ts 1`] = `
+"import { Client } from '@opensearch-project/opensearch';
+import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
+import { PACKAGE_NAME, LOCAL_ENDPOINT } from './constants.js';
+
+type OpenSearchConfig = {
+  collectionEndpoint: string;
+};
+
+let _client: Client | undefined;
+let _clientEndpoint: string | undefined;
+
+export const getOpenSearchClient = async (): Promise<Client> => {
+  const endpoint =
+    process.env.SERVE_LOCAL === 'true'
+      ? LOCAL_ENDPOINT
+      : await resolveOpenSearchEndpoint();
+  if (_client === undefined || _clientEndpoint !== endpoint) {
+    _clientEndpoint = endpoint;
+    _client = new Client({ node: endpoint });
+  }
+  return _client;
+};
+
+let _collectionEndpoint: string | undefined;
+
+export const resolveOpenSearchEndpoint = async (): Promise<string> => {
+  if (process.env.SERVE_LOCAL === 'true') {
+    return LOCAL_ENDPOINT;
+  }
+  if (_collectionEndpoint === undefined) {
+    const appId = process.env.RUNTIME_CONFIG_APP_ID;
+    if (!appId) {
+      throw new Error('RUNTIME_CONFIG_APP_ID environment variable is not set');
+    }
+    const config = await getAppConfig<{
+      [key: string]: OpenSearchConfig | undefined;
+    }>('opensearch', {
+      application: appId,
+      environment: 'default',
+      transform: 'json',
+    });
+    const collectionEndpoint = config?.[PACKAGE_NAME]?.collectionEndpoint;
+    if (!collectionEndpoint) {
+      throw new Error(
+        'Could not resolve OpenSearch collection endpoint from runtime config',
+      );
+    }
+    _collectionEndpoint = collectionEndpoint;
+  }
+  return _collectionEndpoint!;
+};
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/src/constants.ts 1`] = `
+"export const PACKAGE_NAME = 'MySearch';
+
+// Local development connection details (used when SERVE_LOCAL=true, see serve-local Nx target)
+export const LOCAL_PORT = 9200;
+export const LOCAL_ENDPOINT = \`http://localhost:\${LOCAL_PORT}\`;
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/src/index.ts 1`] = `
+"export { PACKAGE_NAME, LOCAL_ENDPOINT } from './constants.js';
+export { getOpenSearchClient, resolveOpenSearchEndpoint } from './client.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project 1`] = `
+"import { Lazy, Names } from 'aws-cdk-lib';
+import { Grant, IGrantable } from 'aws-cdk-lib/aws-iam';
+import { Construct } from 'constructs';
+import {
+  CfnAccessPolicy,
+  CfnCollection,
+  CfnCollectionProps,
+  CfnEncryptionPolicy,
+  CfnNetworkPolicy,
+} from 'aws-cdk-lib/aws-opensearchserverless';
+import { RuntimeConfig } from '../runtime-config.js';
+
+export type CollectionType = 'SEARCH' | 'TIMESERIES' | 'VECTORSEARCH';
+
+type _CollectionProps = Omit<CfnCollectionProps, 'name' | 'type'>;
+
+export interface OpenSearchServerlessCollectionProps extends _CollectionProps {
+  /**
+   * RuntimeConfig key used under the \`opensearch\` namespace.
+   */
+  readonly runtimeConfigKey: string;
+
+  /**
+   * The type of collection.
+   *
+   * @default 'SEARCH'
+   */
+  readonly type?: CollectionType;
+}
+
+export abstract class OpenSearchServerlessCollection extends Construct {
+  public readonly collection: CfnCollection;
+  public readonly encryptionPolicy: CfnEncryptionPolicy;
+  public readonly networkPolicy: CfnNetworkPolicy;
+  public readonly dataAccessPolicy: CfnAccessPolicy;
+
+  private readonly _readWritePrincipals: string[] = [];
+  private readonly _readPrincipals: string[] = [];
+
+  constructor(
+    scope: Construct,
+    id: string,
+    {
+      runtimeConfigKey,
+      type = 'SEARCH',
+      ...rest
+    }: OpenSearchServerlessCollectionProps,
+  ) {
+    super(scope, id);
+
+    const collectionName = Names.uniqueResourceName(this, {
+      maxLength: 32,
+      allowedSpecialCharacters: '-',
+    }).toLowerCase();
+
+    this.encryptionPolicy = new CfnEncryptionPolicy(this, 'EncryptionPolicy', {
+      name: \`\${collectionName}-encryption-policy\`,
+      type: 'encryption',
+      policy: JSON.stringify({
+        Rules: [
+          {
+            Resource: [\`collection/\${collectionName}\`],
+            ResourceType: 'collection',
+          },
+        ],
+        AWSOwnedKey: true,
+      }),
+    });
+
+    // Default network policy allows public access. Restrict this to a VPC
+    // endpoint by replacing AllowFromPublic with an AllowVpcEndpointId entry.
+    this.networkPolicy = new CfnNetworkPolicy(this, 'NetworkPolicy', {
+      name: \`\${collectionName}-network-policy\`,
+      type: 'network',
+      policy: JSON.stringify([
+        {
+          Rules: [
+            {
+              Resource: [\`collection/\${collectionName}\`],
+              ResourceType: 'collection',
+            },
+            {
+              Resource: [\`collection/\${collectionName}\`],
+              ResourceType: 'dashboard',
+            },
+          ],
+          AllowFromPublic: true,
+        },
+      ]),
+    });
+
+    this.collection = new CfnCollection(this, runtimeConfigKey, {
+      ...rest,
+      name: collectionName,
+      type,
+    });
+
+    this.collection.addDependency(this.encryptionPolicy);
+
+    this.dataAccessPolicy = new CfnAccessPolicy(this, 'DataAccessPolicy', {
+      name: \`\${collectionName}-data-access-policy\`,
+      type: 'data',
+      policy: Lazy.string({
+        produce: () => {
+          const entries = [];
+          if (this._readWritePrincipals.length > 0) {
+            entries.push({
+              Rules: [
+                {
+                  Resource: [\`collection/\${collectionName}\`],
+                  Permission: [
+                    'aoss:CreateCollectionItems',
+                    'aoss:DeleteCollectionItems',
+                    'aoss:UpdateCollectionItems',
+                    'aoss:DescribeCollectionItems',
+                  ],
+                  ResourceType: 'collection',
+                },
+                {
+                  Resource: [\`index/\${collectionName}/*\`],
+                  Permission: [
+                    'aoss:CreateIndex',
+                    'aoss:DeleteIndex',
+                    'aoss:UpdateIndex',
+                    'aoss:DescribeIndex',
+                    'aoss:ReadDocument',
+                    'aoss:WriteDocument',
+                  ],
+                  ResourceType: 'index',
+                },
+              ],
+              Principal: this._readWritePrincipals,
+            });
+          }
+          if (this._readPrincipals.length > 0) {
+            entries.push({
+              Rules: [
+                {
+                  Resource: [\`collection/\${collectionName}\`],
+                  Permission: ['aoss:DescribeCollectionItems'],
+                  ResourceType: 'collection',
+                },
+                {
+                  Resource: [\`index/\${collectionName}/*\`],
+                  Permission: ['aoss:DescribeIndex', 'aoss:ReadDocument'],
+                  ResourceType: 'index',
+                },
+              ],
+              Principal: this._readPrincipals,
+            });
+          }
+          return JSON.stringify(entries);
+        },
+      }),
+    });
+
+    const rc = RuntimeConfig.ensure(this);
+    rc.set('opensearch', runtimeConfigKey, {
+      collectionEndpoint: this.collection.attrCollectionEndpoint,
+    });
+  }
+
+  /**
+   * Grants full read/write data access to the collection for the given principal.
+   * Adds \`aoss:APIAccessAll\` to the principal's IAM policy and registers the
+   * principal in the collection's data access policy.
+   */
+  public grantReadWriteData(grantable: IGrantable): void {
+    Grant.addToPrincipal({
+      grantee: grantable,
+      actions: ['aoss:APIAccessAll'],
+      resourceArns: [this.collection.attrArn],
+      scope: this,
+    });
+    this._readWritePrincipals.push(
+      ...(Object.values(
+        grantable.grantPrincipal.policyFragment.principals,
+      ).flat() as string[]),
+    );
+  }
+
+  /**
+   * Grants read-only data access to the collection for the given principal.
+   * Adds \`aoss:APIAccessAll\` to the principal's IAM policy and registers the
+   * principal in the collection's data access policy with read-only permissions.
+   */
+  public grantReadData(grantable: IGrantable): void {
+    Grant.addToPrincipal({
+      grantee: grantable,
+      actions: ['aoss:APIAccessAll'],
+      resourceArns: [this.collection.attrArn],
+      scope: this,
+    });
+    this._readPrincipals.push(
+      ...(Object.values(
+        grantable.grantPrincipal.policyFragment.principals,
+      ).flat() as string[]),
+    );
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project 2`] = `
+"import { Construct } from 'constructs';
+import { PACKAGE_NAME } from ':proj/my-search';
+import {
+  OpenSearchServerlessCollection,
+  OpenSearchServerlessCollectionProps,
+} from '../../core/opensearch/serverless.js';
+
+export type MySearchProps = Omit<
+  OpenSearchServerlessCollectionProps,
+  'runtimeConfigKey'
+>;
+
+export class MySearch extends OpenSearchServerlessCollection {
+  constructor(scope: Construct, id: string, props?: MySearchProps) {
+    super(scope, id, {
+      ...props,
+      runtimeConfigKey: PACKAGE_NAME,
+    });
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project 3`] = `
+"export * from './my-search.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project 4`] = `
+"export * from './opensearch/index.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/scripts/pull-image.ts 1`] = `
+"import { spawnSync } from 'child_process';
+
+const ENGINE = 'docker';
+const image = process.argv[2];
+
+const inspect = spawnSync(ENGINE, ['image', 'inspect', image], {
+  stdio: 'ignore',
+});
+
+if (inspect.status !== 0) {
+  const pull = spawnSync(ENGINE, ['pull', image], { stdio: 'inherit' });
+  if (pull.status !== 0) {
+    process.exit(pull.status ?? 1);
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/scripts/start-container.ts 1`] = `
+"import { spawn, spawnSync } from 'child_process';
+
+const ENGINE = 'docker';
+
+const [containerName, image, hostPort] = process.argv.slice(2);
+
+const containerExists = (): boolean =>
+  spawnSync(ENGINE, ['container', 'inspect', containerName], {
+    stdio: 'ignore',
+  }).status === 0;
+
+const isRunning = (): boolean => {
+  const result = spawnSync(
+    ENGINE,
+    ['container', 'inspect', '-f', '{{.State.Running}}', containerName],
+    { encoding: 'utf-8' },
+  );
+  return result.status === 0 && result.stdout.trim() === 'true';
+};
+
+// Multiple opensearch packages run serve-local in parallel sharing the same
+// container. All processes stream logs, but only the one that created the
+// container stops it on exit — others just detach.
+let created = false;
+let runRetries = 0;
+
+for (;;) {
+  if (containerExists()) {
+    if (!isRunning()) {
+      const start = spawnSync(ENGINE, ['start', containerName], {
+        stdio: 'inherit',
+      });
+      if (start.status !== 0) process.exit(start.status ?? 1);
+    }
+    break;
+  }
+  const runArgs = (
+    \`run --rm --name \${containerName}\` +
+    \` -e discovery.type=single-node\` +
+    \` -e DISABLE_SECURITY_PLUGIN=true\` +
+    \` -p \${hostPort}:9200\` +
+    \` -v \${containerName}-data:/usr/share/opensearch/data\` +
+    \` -d \${image}\`
+  ).split(' ');
+  const create = spawnSync(ENGINE, runArgs, { stdio: 'pipe' });
+  if (create.status === 0) {
+    created = true;
+    break;
+  }
+  if (!containerExists() && ++runRetries > 3) {
+    process.stderr.write(create.stderr);
+    process.exit(create.status ?? 1);
+  }
+}
+
+const logs = spawn(ENGINE, ['logs', '-f', containerName], {
+  stdio: ['ignore', 'inherit', 'inherit'],
+});
+
+let exiting = false;
+
+const cleanup = () => {
+  if (exiting) return;
+  exiting = true;
+  if (created) {
+    spawnSync(ENGINE, ['stop', containerName], { stdio: 'ignore' });
+  }
+  logs.kill();
+  process.exit(0);
+};
+
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+process.on('SIGHUP', cleanup);
+
+logs.on('exit', (code) => {
+  if (!exiting) process.exit(code ?? 0);
+});
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/scripts/wait-for-opensearch.ts 1`] = `
+"const [port] = process.argv.slice(2);
+const url = \`http://localhost:\${port}/_cluster/health\`;
+
+const MAX_ATTEMPTS = 60;
+const RETRY_DELAY_MS = 2000;
+
+for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const body = await res.json();
+      if (body.status === 'green' || body.status === 'yellow') {
+        console.log(\`OpenSearch is ready (status: \${body.status})\`);
+        process.exit(0);
+      }
+    }
+  } catch {
+    // not ready yet
+  }
+  if (attempt < MAX_ATTEMPTS) {
+    console.log(
+      \`Waiting for OpenSearch... (attempt \${attempt}/\${MAX_ATTEMPTS})\`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  }
+}
+
+console.error(\`OpenSearch did not become ready after \${MAX_ATTEMPTS} attempts\`);
+process.exit(1);
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/src/client.ts 1`] = `
+"import { Client } from '@opensearch-project/opensearch';
+import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
+import { PACKAGE_NAME, LOCAL_ENDPOINT } from './constants.js';
+
+type OpenSearchConfig = {
+  collectionEndpoint: string;
+};
+
+let _client: Client | undefined;
+let _clientEndpoint: string | undefined;
+
+export const getOpenSearchClient = async (): Promise<Client> => {
+  const endpoint =
+    process.env.SERVE_LOCAL === 'true'
+      ? LOCAL_ENDPOINT
+      : await resolveOpenSearchEndpoint();
+  if (_client === undefined || _clientEndpoint !== endpoint) {
+    _clientEndpoint = endpoint;
+    _client = new Client({ node: endpoint });
+  }
+  return _client;
+};
+
+let _collectionEndpoint: string | undefined;
+
+export const resolveOpenSearchEndpoint = async (): Promise<string> => {
+  if (process.env.SERVE_LOCAL === 'true') {
+    return LOCAL_ENDPOINT;
+  }
+  if (_collectionEndpoint === undefined) {
+    const appId = process.env.RUNTIME_CONFIG_APP_ID;
+    if (!appId) {
+      throw new Error('RUNTIME_CONFIG_APP_ID environment variable is not set');
+    }
+    const config = await getAppConfig<{
+      [key: string]: OpenSearchConfig | undefined;
+    }>('opensearch', {
+      application: appId,
+      environment: 'default',
+      transform: 'json',
+    });
+    const collectionEndpoint = config?.[PACKAGE_NAME]?.collectionEndpoint;
+    if (!collectionEndpoint) {
+      throw new Error(
+        'Could not resolve OpenSearch collection endpoint from runtime config',
+      );
+    }
+    _collectionEndpoint = collectionEndpoint;
+  }
+  return _collectionEndpoint!;
+};
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/src/constants.ts 1`] = `
+"export const PACKAGE_NAME = 'MySearch';
+
+// Local development connection details (used when SERVE_LOCAL=true, see serve-local Nx target)
+export const LOCAL_PORT = 9200;
+export const LOCAL_ENDPOINT = \`http://localhost:\${LOCAL_PORT}\`;
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/src/index.ts 1`] = `
+"export { PACKAGE_NAME, LOCAL_ENDPOINT } from './constants.js';
+export { getOpenSearchClient, resolveOpenSearchEndpoint } from './client.js';
+"
+`;

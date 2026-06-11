@@ -1,0 +1,27 @@
+const [port] = process.argv.slice(2);
+const url = `http://localhost:${port}/_cluster/health`;
+
+const MAX_ATTEMPTS = 60;
+const RETRY_DELAY_MS = 2000;
+
+for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const body = await res.json();
+      if (body.status === 'green' || body.status === 'yellow') {
+        console.log(`OpenSearch is ready (status: ${body.status})`);
+        process.exit(0);
+      }
+    }
+  } catch {
+    // not ready yet
+  }
+  if (attempt < MAX_ATTEMPTS) {
+    console.log(`Waiting for OpenSearch... (attempt ${attempt}/${MAX_ATTEMPTS})`);
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  }
+}
+
+console.error(`OpenSearch did not become ready after ${MAX_ATTEMPTS} attempts`);
+process.exit(1);

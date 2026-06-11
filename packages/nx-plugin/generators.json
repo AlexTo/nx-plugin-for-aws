@@ -383,6 +383,40 @@
       "description": "Connect a ts#mcp-server to a ts#dynamodb project",
       "metric": "g47",
       "hidden": true
+    },
+    "ts#opensearch": {
+      "factory": "./src/ts/opensearch/generator",
+      "schema": "./src/ts/opensearch/schema.json",
+      "description": "Create an OpenSearch project",
+      "metric": "g48"
+    },
+    "ts#opensearch#trpc-connection": {
+      "factory": "./src/ts/opensearch/trpc-connection/generator",
+      "schema": "./src/ts/opensearch/trpc-connection/schema.json",
+      "description": "Connect a ts#trpc-api project to a ts#opensearch project",
+      "metric": "g49",
+      "hidden": true
+    },
+    "ts#opensearch#smithy-connection": {
+      "factory": "./src/ts/opensearch/smithy-connection/generator",
+      "schema": "./src/ts/opensearch/smithy-connection/schema.json",
+      "description": "Connect a Smithy backend to a ts#opensearch project",
+      "metric": "g50",
+      "hidden": true
+    },
+    "ts#opensearch#agent-connection": {
+      "factory": "./src/ts/opensearch/agent-connection/generator",
+      "schema": "./src/ts/opensearch/agent-connection/schema.json",
+      "description": "Connect a ts#agent to a ts#opensearch project",
+      "metric": "g51",
+      "hidden": true
+    },
+    "ts#opensearch#mcp-server-connection": {
+      "factory": "./src/ts/opensearch/mcp-server-connection/generator",
+      "schema": "./src/ts/opensearch/mcp-server-connection/schema.json",
+      "description": "Connect a ts#mcp-server to a ts#opensearch project",
+      "metric": "g52",
+      "hidden": true
     }
   }
 }
