@@ -31,7 +31,16 @@ export interface AddRdbConstructOptions {
   adminUser: string;
   engine: 'postgres' | 'mysql';
   migrationBundleDir: string;
+  /**
+   * Node.js zip bundle directory for the create-db-user Lambda (ts#rdb).
+   * When absent the migration Docker image is reused with the
+   * `create_db_user_handler.handler` command (py#rdb).
+   */
   createDbUserBundleDir: string;
+  /** ORM framework used by the create-db-user Lambda. */
+  framework: 'prisma' | 'sqlmodel';
+  /** Local Docker tag for the Python create-db-user Lambda image. */
+  createDbUserDockerImageTag?: string;
   dockerImageTag: string;
   containerEngine: Containers;
 }
@@ -70,6 +79,12 @@ export const addRdbCdkConstructs = async (
   tree: Tree,
   options: AddRdbConstructOptions,
 ) => {
+  const templateOptions = {
+    ...options,
+    createDbUserBundleDir: options.createDbUserBundleDir,
+    framework: options.framework,
+    createDbUserDockerImageTag: options.createDbUserDockerImageTag,
+  };
   generateFiles(
     tree,
     joinPathFragments(import.meta.dirname, 'files', 'cdk', 'core', 'rdb'),
@@ -80,7 +95,7 @@ export const addRdbCdkConstructs = async (
       'core',
       'rdb',
     ),
-    options,
+    templateOptions,
     {
       overwriteStrategy: OverwriteStrategy.KeepExisting,
     },
@@ -90,7 +105,7 @@ export const addRdbCdkConstructs = async (
     tree,
     joinPathFragments(import.meta.dirname, 'files', 'cdk', 'app', 'dbs'),
     joinPathFragments(PACKAGES_DIR, SHARED_CONSTRUCTS_DIR, 'src', 'app', 'dbs'),
-    options,
+    templateOptions,
     {
       overwriteStrategy: OverwriteStrategy.KeepExisting,
     },
@@ -136,6 +151,12 @@ export const addRdbTerraformModules = (
   tree: Tree,
   options: AddRdbConstructOptions,
 ) => {
+  const templateOptions = {
+    ...options,
+    createDbUserBundleDir: options.createDbUserBundleDir,
+    framework: options.framework,
+    createDbUserDockerImageTag: options.createDbUserDockerImageTag,
+  };
   generateFiles(
     tree,
     joinPathFragments(import.meta.dirname, 'files', 'terraform', 'core', 'rdb'),

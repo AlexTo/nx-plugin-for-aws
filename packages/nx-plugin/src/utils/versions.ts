@@ -164,6 +164,10 @@ export const PY_VERSIONS = {
   'strands-agents-tools': '==0.8.2',
   ty: '==0.0.55',
   pynamodb: '==6.1.0',
+  sqlmodel: '==0.0.38',
+  alembic: '==1.18.4',
+  pymysql: '==1.2.0',
+  'psycopg[binary,pool]': '==3.3.4',
   uvicorn: '==0.49.0',
 } as const;
 export type IPyDepVersion = keyof typeof PY_VERSIONS;

@@ -265,7 +265,7 @@ export const tsRdbGenerator = async (
       databasePackageAlias: toScopeAlias(fullyQualifiedName),
       databaseName,
       adminUser: databaseUser,
-      engine: options.engine === 'mysql' ? 'mysql' : 'postgres',
+      engine: options.engine,
       migrationBundleDir,
       createDbUserBundleDir: joinPathFragments(
         'dist',
@@ -273,6 +273,7 @@ export const tsRdbGenerator = async (
         'bundle',
         'create-db-user',
       ),
+      framework: options.framework,
       dockerImageTag,
       containerEngine,
     });

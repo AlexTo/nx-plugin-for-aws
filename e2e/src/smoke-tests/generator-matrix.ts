@@ -380,6 +380,14 @@ export const runGeneratorMatrix = async (opts: RunCliOpts) => {
     `generate @aws/nx-plugin:ts#rdb --name=my-sql-db --infra=aurora --engine=mysql --framework=prisma --no-interactive`,
     opts,
   );
+  await runCLI(
+    `generate @aws/nx-plugin:py#rdb --name=py-postgres-db --infra=aurora --engine=postgres --no-interactive`,
+    opts,
+  );
+  await runCLI(
+    `generate @aws/nx-plugin:py#rdb --name=py-mysql-db --infra=aurora --engine=mysql --no-interactive`,
+    opts,
+  );
 
   await runCLI(`generate @aws/nx-plugin:license --no-interactive`, opts);
 
