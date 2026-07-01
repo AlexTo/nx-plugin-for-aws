@@ -434,6 +434,7 @@ export default defineConfig({
                 { label: 'ts#dynamodb', link: '/guides/ts-dynamodb' },
                 { label: 'py#dynamodb', link: '/guides/py-dynamodb' },
                 { label: 'ts#rdb', link: '/guides/ts-rdb' },
+                { label: 'py#rdb', link: '/guides/py-rdb' },
               ],
             },
             {
@@ -619,6 +620,18 @@ export default defineConfig({
                 {
                   label: 'MCP Server → Relational Database',
                   link: '/guides/connection/ts-mcp-server-rdb',
+                },
+                {
+                  label: 'Python Agent → Relational Database',
+                  link: '/guides/connection/py-agent-rdb',
+                },
+                {
+                  label: 'FastAPI → Relational Database',
+                  link: '/guides/connection/py-fast-api-rdb',
+                },
+                {
+                  label: 'Python MCP Server → Relational Database',
+                  link: '/guides/connection/py-mcp-server-rdb',
                 },
                 {
                   label: 'tRPC API → DynamoDB',
