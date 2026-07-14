@@ -136,6 +136,8 @@ The following list of generators are what is currently available in the \`@aws/n
 
 - **ts#dynamodb**: Create a TypeScript DynamoDB project
 
+- **ts#opensearch**: Create a TypeScript OpenSearch project
+
 - **py#dynamodb**: Create a Python DynamoDB project
 
 - **py#rdb**: Create a Python relational database project

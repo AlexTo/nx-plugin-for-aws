@@ -1,0 +1,1697 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ts#opensearch generator > should generate scripts for finch engine 1`] = `
+"{
+  "runtimeConfigKey": "MySearch",
+  "localDev": {
+    "port": 9200,
+    "image": "opensearchproject/opensearch:2",
+    "containerName": "proj-opensearch",
+    "containerEngine": "finch"
+  },
+  "indices": []
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate terraform modules when iac is terraform 1`] = `
+"terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "6.54.0"
+    }
+  }
+}
+
+variable "name" {
+  description = "Name for the OpenSearch Serverless collection."
+  type        = string
+}
+
+variable "type" {
+  description = "Collection type - VECTORSEARCH, SEARCH or TIMESERIES."
+  type        = string
+  default     = "VECTORSEARCH"
+}
+
+variable "enable_key_rotation" {
+  description = "Whether to enable automatic key rotation on the KMS key used to encrypt the collection."
+  type        = bool
+  default     = true
+}
+
+variable "data_access_grants" {
+  description = "IAM roles to grant data-plane access to, and the aoss index permissions each should receive. Terraform has no imperative grant API (unlike the CDK construct's grantReadData/grantWriteData/grantReadWriteData methods), so grants are declared here directly."
+  type = list(object({
+    principal_arn = string
+    permissions   = list(string)
+  }))
+  default = []
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+
+resource "aws_kms_key" "collection" {
+  description         = "KMS key for OpenSearch Serverless collection \${var.name}"
+  enable_key_rotation = var.enable_key_rotation
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EnableRootAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:\${data.aws_partition.current.partition}:iam::\${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowOpenSearchServerlessService"
+        Effect = "Allow"
+        Principal = {
+          Service = "aoss.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+          "kms:CreateGrant"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_opensearchserverless_security_policy" "encryption" {
+  name = "\${var.name}-encryption"
+  type = "encryption"
+  policy = jsonencode({
+    Rules = [
+      { ResourceType = "collection", Resource = ["collection/\${var.name}"] }
+    ]
+    AWSOwnedKey = false
+    KmsARN      = aws_kms_key.collection.arn
+  })
+}
+
+resource "aws_opensearchserverless_security_policy" "network" {
+  name = "\${var.name}-network"
+  type = "network"
+  policy = jsonencode([
+    {
+      Rules = [
+        { ResourceType = "collection", Resource = ["collection/\${var.name}"] },
+        { ResourceType = "dashboard", Resource = ["collection/\${var.name}"] }
+      ]
+      AllowFromPublic = true
+    }
+  ])
+}
+
+data "aws_caller_identity" "deployer" {}
+
+locals {
+  # The identity running \`terraform apply\` needs its own data access grant -
+  # creating/updating indices at deploy time (see the null_resource in the app
+  # module) is itself a data-plane operation gated by this policy, not just the
+  # deployer's IAM permissions.
+  all_data_access_grants = concat(var.data_access_grants, [{
+    principal_arn = data.aws_caller_identity.deployer.arn
+    permissions   = ["aoss:CreateIndex", "aoss:UpdateIndex", "aoss:DeleteIndex", "aoss:ReadDocument", "aoss:WriteDocument"]
+  }])
+}
+
+resource "aws_opensearchserverless_access_policy" "data" {
+  name = "\${var.name}-access"
+  type = "data"
+  policy = jsonencode([
+    for grant in local.all_data_access_grants : {
+      Rules = [
+        {
+          ResourceType = "index"
+          Resource     = ["index/\${var.name}/*"]
+          Permission   = grant.permissions
+        }
+      ]
+      Principal = [grant.principal_arn]
+    }
+  ])
+}
+
+resource "aws_opensearchserverless_collection" "collection" {
+  name = var.name
+  type = var.type
+
+  depends_on = [
+    aws_opensearchserverless_security_policy.encryption,
+    aws_opensearchserverless_security_policy.network,
+    aws_opensearchserverless_access_policy.data,
+  ]
+}
+
+output "collection_name" {
+  description = "Name of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.name
+}
+
+output "collection_arn" {
+  description = "ARN of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.arn
+}
+
+output "collection_endpoint" {
+  description = "Data-plane endpoint of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.collection_endpoint
+}
+
+output "kms_key_arn" {
+  description = "ARN of the KMS key used to encrypt the collection."
+  value       = aws_kms_key.collection.arn
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate terraform modules when iac is terraform 2`] = `
+"terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "6.54.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "3.9.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "3.3.0"
+    }
+  }
+}
+
+variable "data_access_grants" {
+  description = "IAM roles to grant data-plane access to, and the aoss index permissions each should receive."
+  type = list(object({
+    principal_arn = string
+    permissions   = list(string)
+  }))
+  default = []
+}
+
+data "aws_region" "current" {}
+
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+locals {
+  opensearch_config   = jsondecode(file("\${path.module}/../../../../../../../packages/my-search/config.json"))
+  project_root        = abspath("\${path.module}/../../../../../../../packages/my-search")
+  sync_indices_script = abspath("\${path.module}/../../../../../../../packages/common/scripts/src/opensearch/sync-indices.ts")
+}
+
+module "opensearch_collection" {
+  source             = "../../../core/opensearch"
+  name               = "my-search-\${random_string.suffix.result}"
+  data_access_grants = var.data_access_grants
+}
+
+module "add_to_runtime_config" {
+  source = "../../../core/runtime-config/entry"
+
+  namespace = "opensearch"
+  key       = local.opensearch_config.runtimeConfigKey
+  value = {
+    collectionEndpoint = module.opensearch_collection.collection_endpoint
+    region             = data.aws_region.current.region
+  }
+}
+
+# Terraform has no equivalent of CDK's \`AWS::OpenSearchServerless::Index\`
+# resource yet, so indices are synced with the same script used for local dev
+# (see ts#opensearch's \`dev\` target), run once against the real collection
+# using the deployer's own AWS credentials. Reruns whenever the zod-derived
+# mapping snapshot in config.json changes (kept fresh by the project's
+# \`sync-mappings\` build target).
+resource "null_resource" "sync_indices" {
+  triggers = {
+    collection_id = module.opensearch_collection.collection_arn
+    indices_hash  = sha256(jsonencode(local.opensearch_config.indices))
+  }
+
+  provisioner "local-exec" {
+    command     = "tsx \${local.sync_indices_script}"
+    working_dir = local.project_root
+    environment = {
+      OPENSEARCH_COLLECTION_ENDPOINT = module.opensearch_collection.collection_endpoint
+      AWS_REGION                     = data.aws_region.current.region
+    }
+  }
+
+  depends_on = [module.opensearch_collection]
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/common/scripts/src/opensearch/create-local-indices.ts 1`] = `
+"import { readFileSync } from 'fs';
+import { Client } from '@opensearch-project/opensearch';
+import {
+  ensureIndex,
+  loadIndexDefinitions,
+  waitForCluster,
+} from './sync-indices-lib.js';
+
+const { port } = JSON.parse(readFileSync('config.json', 'utf-8')).localDev;
+
+const client = new Client({ node: \`http://localhost:\${port}\` });
+
+await waitForCluster(client);
+
+for (const { indexName, mapping } of await loadIndexDefinitions()) {
+  await ensureIndex(client, indexName, mapping);
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/common/scripts/src/opensearch/pull-image.ts 1`] = `
+"import { spawnSync } from 'child_process';
+import { readFileSync } from 'fs';
+
+const { containerEngine, image } = JSON.parse(
+  readFileSync('config.json', 'utf-8'),
+).localDev;
+
+const inspect = spawnSync(containerEngine, ['image', 'inspect', image], {
+  stdio: 'ignore',
+});
+if (inspect.status !== 0) {
+  const pull = spawnSync(containerEngine, ['pull', image], {
+    stdio: 'inherit',
+  });
+  if (pull.status !== 0) {
+    process.exit(pull.status ?? 1);
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/common/scripts/src/opensearch/start-container.ts 1`] = `
+"import { spawn, spawnSync } from 'child_process';
+import { readFileSync } from 'fs';
+
+const { containerEngine, containerName, image, port } = JSON.parse(
+  readFileSync('config.json', 'utf-8'),
+).localDev;
+
+const containerExists = (): boolean =>
+  spawnSync(containerEngine, ['container', 'inspect', containerName], {
+    stdio: 'ignore',
+  }).status === 0;
+
+const isRunning = (): boolean => {
+  const result = spawnSync(
+    containerEngine,
+    ['container', 'inspect', '-f', '{{.State.Running}}', containerName],
+    { encoding: 'utf-8' },
+  );
+  return result.status === 0 && result.stdout.trim() === 'true';
+};
+
+// Ensure the image is available locally before starting the container.
+const ensureImage = (): void => {
+  const inspect = spawnSync(containerEngine, ['image', 'inspect', image], {
+    stdio: 'ignore',
+  });
+  if (inspect.status !== 0) {
+    const pull = spawnSync(containerEngine, ['pull', image], {
+      stdio: 'inherit',
+    });
+    if (pull.status !== 0) process.exit(pull.status ?? 1);
+  }
+};
+
+// Multiple OpenSearch packages run dev in parallel sharing the same
+// container. All processes stream logs, but only the one that created the
+// container stops it on exit — others just detach.
+let created = false;
+let runRetries = 0;
+
+ensureImage();
+
+for (;;) {
+  if (containerExists()) {
+    if (!isRunning()) {
+      // Another process may have started it between our inspect and start — container engine start
+      // exits 0 even if the container is already running, so no special-casing needed.
+      const start = spawnSync(containerEngine, ['start', containerName], {
+        stdio: 'inherit',
+      });
+      if (start.status !== 0) process.exit(start.status ?? 1);
+    }
+    break;
+  }
+  const runArgs = [
+    'run',
+    ...(containerEngine === 'docker' ? ['--rm'] : []),
+    '--name',
+    containerName,
+    '-p',
+    \`\${port}:9200\`,
+    '-e',
+    'discovery.type=single-node',
+    '-e',
+    'plugins.security.disabled=true',
+    '-e',
+    'DISABLE_INSTALL_DEMO_CONFIG=true',
+    '-e',
+    'DISABLE_SECURITY_PLUGIN=true',
+    '-v',
+    \`\${containerName}-data:/usr/share/opensearch/data\`,
+    '-d',
+    image,
+  ];
+  const create = spawnSync(containerEngine, runArgs, { stdio: 'pipe' });
+  if (create.status === 0) {
+    created = true;
+    break;
+  }
+  if (!containerExists() && ++runRetries > 3) {
+    process.stderr.write(create.stderr);
+    process.exit(create.status ?? 1);
+  }
+}
+
+const logs = spawn(containerEngine, ['logs', '-f', containerName], {
+  stdio: ['ignore', 'inherit', 'inherit'],
+});
+
+let exiting = false;
+
+const cleanup = () => {
+  if (exiting) return;
+  exiting = true;
+  if (created) {
+    if (containerEngine === 'docker') {
+      spawnSync(containerEngine, ['stop', containerName], { stdio: 'ignore' });
+    } else {
+      spawnSync(containerEngine, ['rm', '-f', containerName], {
+        stdio: 'ignore',
+      });
+    }
+  }
+  logs.kill();
+  process.exit(0);
+};
+
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+process.on('SIGHUP', cleanup);
+
+logs.on('exit', (code) => {
+  if (!exiting) process.exit(code ?? 0);
+});
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/common/scripts/src/opensearch/sync-index-mappings.ts 1`] = `
+"import { readFileSync, writeFileSync } from 'fs';
+import { loadIndexDefinitions } from './sync-indices-lib.js';
+
+// Runs as a build step (see the \`sync-mappings\` target) so config.json's
+// \`indices\` is always a fresh snapshot of the zod schemas under src/indices/.
+// The CDK app construct (a different Nx project, so it can't import these zod
+// modules directly at synth time) reads this snapshot to declare a
+// \`CfnIndex\` per index - the same reason DynamoDB's GSIs are snapshotted into
+// config.json rather than read from the entity source directly.
+const configPath = 'config.json';
+const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+
+config.indices = (await loadIndexDefinitions()).map(
+  ({ indexName, mapping }) => ({
+    indexName,
+    mapping: mapping.mappings,
+  }),
+);
+
+writeFileSync(configPath, \`\${JSON.stringify(config, null, 2)}\\n\`);
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/common/scripts/src/opensearch/sync-indices.ts 1`] = `
+"import { Client } from '@opensearch-project/opensearch';
+import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import {
+  ensureIndex,
+  loadIndexDefinitions,
+  waitForCluster,
+} from './sync-indices-lib.js';
+
+// Invoked by the Terraform module (via a null_resource local-exec) after the
+// collection is created, using the deployer's own AWS credentials - Terraform
+// has no native resource for OpenSearch Serverless indices, unlike CDK's
+// \`AWS::OpenSearchServerless::Index\`, so this runs the same sync logic used
+// for local dev against the real collection instead.
+const collectionEndpoint = process.env.OPENSEARCH_COLLECTION_ENDPOINT;
+const region = process.env.AWS_REGION;
+if (!collectionEndpoint || !region) {
+  throw new Error(
+    'OPENSEARCH_COLLECTION_ENDPOINT and AWS_REGION environment variables are required',
+  );
+}
+
+const client = new Client({
+  ...AwsSigv4Signer({
+    region,
+    service: 'aoss',
+    getCredentials: () => defaultProvider()(),
+  }),
+  node: collectionEndpoint,
+});
+
+await waitForCluster(client);
+
+for (const { indexName, mapping } of await loadIndexDefinitions()) {
+  await ensureIndex(client, indexName, mapping);
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/common/scripts/src/opensearch/sync-indices-lib.ts 1`] = `
+"import { readdirSync } from 'fs';
+import { resolve } from 'path';
+import { pathToFileURL } from 'url';
+import type { Client } from '@opensearch-project/opensearch';
+
+// Structurally matches OpenSearchIndexDefinition/zodSchemaToOpenSearchMapping
+// from the calling project's generated src/zod-to-mapping.ts. Declared locally
+// rather than imported: this module is shared across every ts#opensearch
+// project, each with its own zod-to-mapping.ts at a different relative path,
+// so the module it loads at runtime (below) can only be resolved dynamically.
+interface OpenSearchIndexDefinition {
+  indexName: string;
+  schema: { parse: (value: unknown) => unknown };
+}
+type OpenSearchMapping = { mappings: { properties: Record<string, unknown> } };
+type ZodToMappingModule = {
+  zodSchemaToOpenSearchMapping: (schema: unknown) => OpenSearchMapping;
+  isOpenSearchIndexDefinition: (
+    value: unknown,
+  ) => value is OpenSearchIndexDefinition;
+};
+
+export interface ResolvedIndex {
+  indexName: string;
+  mapping: OpenSearchMapping;
+}
+
+// Always invoked with cwd set to the calling project's root, so the project's
+// own zod schemas (the single source of truth for each index's mapping) are
+// resolved relative to process.cwd() rather than this module's own location.
+export const loadIndexDefinitions = async (): Promise<ResolvedIndex[]> => {
+  const { zodSchemaToOpenSearchMapping, isOpenSearchIndexDefinition } =
+    (await import(
+      pathToFileURL(resolve('src/zod-to-mapping.ts')).href
+    )) as ZodToMappingModule;
+
+  const indicesDir = resolve('src/indices');
+  const files = readdirSync(indicesDir).filter(
+    (f) => f.endsWith('.ts') && f !== 'index.ts',
+  );
+  const modules = await Promise.all(
+    files.map((f) => import(pathToFileURL(resolve(indicesDir, f)).href)),
+  );
+  const definitions = modules.flatMap((mod) =>
+    Object.values(mod).filter(isOpenSearchIndexDefinition),
+  );
+
+  return definitions.map(({ indexName, schema }) => ({
+    indexName,
+    mapping: zodSchemaToOpenSearchMapping(schema),
+  }));
+};
+
+export const waitForCluster = async (client: Client): Promise<void> => {
+  for (;;) {
+    try {
+      await client.cluster.health({}, { requestTimeout: 10000 });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+};
+
+export const ensureIndex = async (
+  client: Client,
+  indexName: string,
+  mapping: OpenSearchMapping,
+): Promise<void> => {
+  const { body: exists } = await client.indices.exists(
+    { index: indexName },
+    { requestTimeout: 10000 },
+  );
+  if (!exists) {
+    // Cast: \`mapping\` is intentionally untyped against opensearch-js's own
+    // \`Property\` union (a closed set of concrete field-mapping shapes) so this
+    // module stays framework-agnostic - the same mapping also has to satisfy
+    // CDK's independently-typed \`CfnIndex.MappingsProperty\` (see the app
+    // construct template), and both are structurally satisfied at runtime.
+    await client.indices.create(
+      { index: indexName, body: mapping as any },
+      { requestTimeout: 10000 },
+    );
+    console.log(\`Created index: \${indexName}\`);
+    return;
+  }
+  // Existing index: OpenSearch only allows adding new fields via putMapping -
+  // changing or removing an existing field's mapping is rejected. A breaking
+  // schema change requires the standard reindex-and-alias-swap approach.
+  await client.indices.putMapping(
+    { index: indexName, body: mapping.mappings as any },
+    { requestTimeout: 10000 },
+  );
+  console.log(\`Updated mapping: \${indexName}\`);
+};
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/src/client.ts 1`] = `
+"import { Client } from '@opensearch-project/opensearch';
+import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Generated: must match runtimeConfigKey in config.json
+const runtimeConfigKey = 'MySearch';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// config.json is only present in local dev (not included in the deployed bundle); guard with LOCAL_DEV check
+const localDev = () =>
+  JSON.parse(readFileSync(join(__dirname, '../config.json'), 'utf-8')).localDev;
+
+type OpenSearchConfig = {
+  collectionEndpoint: string;
+  region: string;
+};
+
+let _config: OpenSearchConfig | undefined;
+
+// Resolves both the endpoint and region together since the SigV4 signer needs
+// the collection's region, which (unlike DynamoDB's fixed regional endpoint)
+// varies per-collection and so must come from the same runtime config lookup.
+const resolveConfig = async (): Promise<OpenSearchConfig> => {
+  if (process.env.LOCAL_DEV === 'true') {
+    const { port } = localDev();
+    return {
+      collectionEndpoint: \`http://localhost:\${port}\`,
+      region: 'us-east-1',
+    };
+  }
+  if (_config === undefined) {
+    const appId = process.env.RUNTIME_CONFIG_APP_ID;
+    if (!appId) {
+      throw new Error('RUNTIME_CONFIG_APP_ID environment variable is not set');
+    }
+    const config = await getAppConfig<{
+      [key: string]: OpenSearchConfig | undefined;
+    }>('opensearch', {
+      application: appId,
+      environment: 'default',
+      transform: 'json',
+    });
+    const resolved = config?.[runtimeConfigKey];
+    if (!resolved?.collectionEndpoint) {
+      throw new Error(
+        'Could not resolve OpenSearch collection endpoint from runtime config',
+      );
+    }
+    _config = resolved;
+  }
+  return _config;
+};
+
+export const resolveCollectionEndpoint = async (): Promise<string> =>
+  (await resolveConfig()).collectionEndpoint;
+
+let _client: Client | undefined;
+
+// Unlike getDynamoDBClient, this is async: the collection endpoint (the
+// client's \`node\`) must be resolved before the client can be constructed,
+// rather than being a fixed regional endpoint known up front.
+export const getOpenSearchClient = async (): Promise<Client> => {
+  if (!_client) {
+    const { collectionEndpoint, region } = await resolveConfig();
+    _client =
+      process.env.LOCAL_DEV === 'true'
+        ? new Client({ node: collectionEndpoint })
+        : new Client({
+            ...AwsSigv4Signer({
+              region,
+              service: 'aoss',
+              getCredentials: () => defaultProvider()(),
+            }),
+            node: collectionEndpoint,
+          });
+  }
+  return _client;
+};
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/src/index.ts 1`] = `
+"export { getOpenSearchClient, resolveCollectionEndpoint } from './client.js';
+export * from './indices/index.js';
+export * from './zod-to-mapping.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/src/indices/example.ts 1`] = `
+"import { z } from 'zod';
+import type { OpenSearchIndexDefinition } from '../zod-to-mapping.js';
+
+export const exampleIndexName = 'example';
+
+// Example index schema - replace with your own. zod is the single source of
+// truth: this schema both validates documents and derives the OpenSearch index
+// mapping (see ../zod-to-mapping.js). Use \`.meta({ opensearch: {...} })\` where
+// zod's type system doesn't distinguish an OpenSearch field type (eg. \`keyword\`
+// vs \`text\`) or has no equivalent at all (eg. \`knn_vector\` for vector search).
+export const ExampleDocument = z.object({
+  id: z.string(),
+  title: z.string(),
+  category: z.string().meta({ opensearch: { type: 'keyword' } }),
+  createdAt: z.iso.datetime(),
+  // A vector field for semantic/RAG search. Adjust \`dimension\` to match your
+  // embedding model's output size.
+  embedding: z
+    .array(z.number())
+    .meta({ opensearch: { type: 'knn_vector', dimension: 1536 } }),
+});
+
+export type ExampleDocument = z.infer<typeof ExampleDocument>;
+
+// Discovered by local-dev and deploy-time index sync tooling - export one of
+// these per index module.
+export const exampleIndexDefinition: OpenSearchIndexDefinition<
+  typeof ExampleDocument
+> = {
+  indexName: exampleIndexName,
+  schema: ExampleDocument,
+};
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/src/indices/index.ts 1`] = `
+"export * from './example.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project > packages/my-search/src/zod-to-mapping.ts 1`] = `
+"import { z } from 'zod';
+
+// OpenSearch-specific mapping overrides for a field, set via \`.meta({ opensearch: {...} })\`.
+// Needed wherever zod's type system doesn't distinguish an OpenSearch field type
+// (eg. \`keyword\` vs \`text\`) or has no equivalent at all (eg. \`knn_vector\`, \`geo_point\`).
+export interface OpenSearchFieldOverride {
+  type?: string;
+  dimension?: number;
+  method?: {
+    name?: string;
+    spaceType?: string;
+    engine?: string;
+    parameters?: Record<string, unknown>;
+  };
+  [key: string]: unknown;
+}
+
+interface JsonSchemaNode {
+  type?: string | string[];
+  format?: string;
+  properties?: Record<string, JsonSchemaNode>;
+  items?: JsonSchemaNode;
+  opensearch?: OpenSearchFieldOverride;
+}
+
+const inferType = (node: JsonSchemaNode): string => {
+  const type = Array.isArray(node.type) ? node.type[0] : node.type;
+  switch (type) {
+    case 'string':
+      return node.format === 'date-time' ? 'date' : 'text';
+    case 'number':
+      return 'float';
+    case 'integer':
+      return 'long';
+    case 'boolean':
+      return 'boolean';
+    case 'object':
+      return 'object';
+    default:
+      return 'text';
+  }
+};
+
+const nodeToProperty = (node: JsonSchemaNode): Record<string, unknown> => {
+  if (node.opensearch) {
+    const { type, ...rest } = node.opensearch;
+    return { type: type ?? inferType(node), ...rest };
+  }
+
+  const type = Array.isArray(node.type) ? node.type[0] : node.type;
+
+  if (type === 'object' && node.properties) {
+    return {
+      type: 'object',
+      properties: Object.fromEntries(
+        Object.entries(node.properties).map(([key, value]) => [
+          key,
+          nodeToProperty(value),
+        ]),
+      ),
+    };
+  }
+
+  if (type === 'array' && node.items) {
+    // OpenSearch has no distinct array mapping type - an array of primitives
+    // maps the same way as a single value of that type would.
+    return nodeToProperty(node.items);
+  }
+
+  return { type: inferType(node) };
+};
+
+/**
+ * Derives an OpenSearch index mapping from a zod object schema. Field types are
+ * inferred from the zod shape; use \`.meta({ opensearch: {...} })\` on a field to
+ * override the inferred type or add mapping parameters (eg. \`knn_vector\`
+ * dimension/method for vector search fields).
+ */
+export const zodSchemaToOpenSearchMapping = (
+  schema: z.ZodObject<any>,
+): { mappings: { properties: Record<string, unknown> } } => {
+  const jsonSchema = z.toJSONSchema(schema, {
+    io: 'output',
+  }) as JsonSchemaNode;
+  const properties = jsonSchema.properties ?? {};
+  return {
+    mappings: {
+      properties: Object.fromEntries(
+        Object.entries(properties).map(([key, value]) => [
+          key,
+          nodeToProperty(value),
+        ]),
+      ),
+    },
+  };
+};
+
+// Pairs an index name with the zod schema that defines its documents. Export
+// one of these per index module (see indices/example.ts) so local-dev and
+// deploy-time tooling can discover every index in the project without relying
+// on file/export naming conventions.
+export interface OpenSearchIndexDefinition<
+  T extends z.ZodObject<any> = z.ZodObject<any>,
+> {
+  indexName: string;
+  schema: T;
+}
+
+export const isOpenSearchIndexDefinition = (
+  value: unknown,
+): value is OpenSearchIndexDefinition =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as OpenSearchIndexDefinition).indexName === 'string' &&
+  typeof (value as OpenSearchIndexDefinition).schema?.parse === 'function';
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project 1`] = `
+"import { Construct } from 'constructs';
+import { Stack } from 'aws-cdk-lib';
+import {
+  CfnAccessPolicy,
+  CfnCollection,
+  CfnCollectionProps,
+  CfnSecurityPolicy,
+} from 'aws-cdk-lib/aws-opensearchserverless';
+import { Grant, IRole } from 'aws-cdk-lib/aws-iam';
+import { Key } from 'aws-cdk-lib/aws-kms';
+import { RuntimeConfig } from './runtime-config.js';
+
+type _CollectionProps = Omit<CfnCollectionProps, 'name' | 'type'>;
+
+export interface OpenSearchCollectionProps extends _CollectionProps {
+  /**
+   * The OpenSearch Serverless collection name. Must be lowercase, 3-28
+   * characters, and contain only letters, numbers and hyphens.
+   */
+  readonly collectionName: string;
+
+  /**
+   * Collection type - VECTORSEARCH for RAG/vector search workloads, SEARCH
+   * for general text search, TIMESERIES for log/metric data.
+   * @default 'VECTORSEARCH'
+   */
+  readonly type?: 'SEARCH' | 'VECTORSEARCH' | 'TIMESERIES';
+
+  /**
+   * RuntimeConfig key used under the \`opensearch\` namespace.
+   */
+  readonly runtimeConfigKey: string;
+
+  /**
+   * Whether to enable automatic key rotation on the KMS key used to encrypt the collection.
+   * @default true
+   */
+  readonly enableKeyRotation?: boolean;
+}
+
+// Keyed by grantee role ARN so a repeat grant to the same role widens its
+// existing Rules entry instead of appending a duplicate.
+interface AccessPolicyStatement {
+  readonly Rules: {
+    ResourceType: 'index';
+    Resource: string[];
+    Permission: string[];
+  }[];
+  readonly Principal: string[];
+}
+
+export abstract class OpenSearchCollection extends Construct {
+  public readonly collection: CfnCollection;
+  // protected (not private) so app construct subclasses can depend a CfnIndex
+  // on it - index creation must wait until the access policy, which needs to
+  // include the deploying principal, has been applied.
+  protected readonly accessPolicy: CfnAccessPolicy;
+  private readonly statementsByRoleArn = new Map<
+    string,
+    AccessPolicyStatement
+  >();
+
+  constructor(
+    scope: Construct,
+    id: string,
+    {
+      collectionName,
+      type = 'VECTORSEARCH',
+      runtimeConfigKey,
+      enableKeyRotation = true,
+      ...rest
+    }: OpenSearchCollectionProps,
+  ) {
+    super(scope, id);
+
+    const key = new Key(this, 'EncryptionKey', { enableKeyRotation });
+
+    const encryptionPolicy = new CfnSecurityPolicy(this, 'EncryptionPolicy', {
+      name: \`\${collectionName}-encryption\`,
+      type: 'encryption',
+      policy: JSON.stringify({
+        Rules: [
+          {
+            ResourceType: 'collection',
+            Resource: [\`collection/\${collectionName}\`],
+          },
+        ],
+        AWSOwnedKey: false,
+        KmsARN: key.keyArn,
+      }),
+    });
+
+    const networkPolicy = new CfnSecurityPolicy(this, 'NetworkPolicy', {
+      name: \`\${collectionName}-network\`,
+      type: 'network',
+      policy: JSON.stringify([
+        {
+          Rules: [
+            {
+              ResourceType: 'collection',
+              Resource: [\`collection/\${collectionName}\`],
+            },
+            {
+              ResourceType: 'dashboard',
+              Resource: [\`collection/\${collectionName}\`],
+            },
+          ],
+          AllowFromPublic: true,
+        },
+      ]),
+    });
+
+    // Starts with no principals - populated by grant calls below (and must
+    // also include whichever identity deploys this stack, since creating the
+    // CfnIndex resources declared by the app construct is itself a data-plane
+    // operation gated by this policy, not just the deployer's own IAM permissions).
+    this.accessPolicy = new CfnAccessPolicy(this, 'AccessPolicy', {
+      name: \`\${collectionName}-access\`,
+      type: 'data',
+      policy: JSON.stringify([]),
+    });
+
+    this.collection = new CfnCollection(this, 'Collection', {
+      ...rest,
+      name: collectionName,
+      type,
+    });
+    this.collection.addDependency(encryptionPolicy);
+    this.collection.addDependency(networkPolicy);
+    this.collection.node.addDependency(this.accessPolicy);
+
+    const rc = RuntimeConfig.ensure(this);
+    rc.set('opensearch', runtimeConfigKey, {
+      collectionEndpoint: this.collection.attrCollectionEndpoint,
+      region: Stack.of(this).region,
+    });
+  }
+
+  /** Grants read (search/get document) access to every index in the collection. */
+  public grantReadData(grantee: IRole): Grant {
+    return this.grant(grantee, ['aoss:ReadDocument']);
+  }
+
+  /** Grants write (index/update/delete document, create/update/delete index) access. */
+  public grantWriteData(grantee: IRole): Grant {
+    return this.grant(grantee, [
+      'aoss:CreateIndex',
+      'aoss:UpdateIndex',
+      'aoss:DeleteIndex',
+      'aoss:WriteDocument',
+    ]);
+  }
+
+  /** Grants both read and write access. */
+  public grantReadWriteData(grantee: IRole): Grant {
+    return this.grant(grantee, [
+      'aoss:CreateIndex',
+      'aoss:UpdateIndex',
+      'aoss:DeleteIndex',
+      'aoss:ReadDocument',
+      'aoss:WriteDocument',
+    ]);
+  }
+
+  /**
+   * Grants OpenSearch Serverless data-plane access. Unlike a typical CDK
+   * resource grant, this requires two halves that AOSS checks on every
+   * request: an identity-based IAM policy statement (\`Grant.addToPrincipal\`,
+   * as usual) *and* an entry in the collection's data access policy naming the
+   * grantee's role ARN and the index-level permissions it's allowed. Takes
+   * \`IRole\` rather than the broader \`IGrantable\` because an access policy
+   * statement must reference a concrete IAM principal ARN, which isn't
+   * available on every \`IGrantable\` (e.g. a \`ServicePrincipal\`).
+   */
+  private grant(grantee: IRole, indexPermissions: string[]): Grant {
+    const existing = this.statementsByRoleArn.get(grantee.roleArn);
+    if (existing) {
+      const rule = existing.Rules[0];
+      rule.Permission = [...new Set([...rule.Permission, ...indexPermissions])];
+    } else {
+      this.statementsByRoleArn.set(grantee.roleArn, {
+        Principal: [grantee.roleArn],
+        Rules: [
+          {
+            ResourceType: 'index',
+            Resource: [\`index/\${this.collection.name}/*\`],
+            Permission: [...indexPermissions],
+          },
+        ],
+      });
+    }
+    this.accessPolicy.policy = JSON.stringify([
+      ...this.statementsByRoleArn.values(),
+    ]);
+
+    return Grant.addToPrincipal({
+      grantee,
+      actions: ['aoss:APIAccessAll'],
+      resourceArns: [this.collection.attrArn],
+    });
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project 2`] = `
+"import { Construct } from 'constructs';
+import { CfnIndex } from 'aws-cdk-lib/aws-opensearchserverless';
+import {
+  OpenSearchCollection,
+  OpenSearchCollectionProps,
+} from '../../core/opensearch.js';
+import { findWorkspaceRoot } from '../../core/workspace.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+
+const { runtimeConfigKey, indices } = JSON.parse(
+  readFileSync(
+    join(
+      findWorkspaceRoot(fileURLToPath(new URL(import.meta.url))),
+      'packages/my-search/config.json',
+    ),
+    'utf-8',
+  ),
+) as {
+  runtimeConfigKey: string;
+  indices: {
+    indexName: string;
+    mapping: { properties: Record<string, unknown> };
+  }[];
+};
+
+export type MySearchProps = Omit<
+  OpenSearchCollectionProps,
+  'runtimeConfigKey' | 'collectionName'
+> & {
+  collectionName?: string;
+};
+
+export class MySearch extends OpenSearchCollection {
+  constructor(scope: Construct, id: string, props?: MySearchProps) {
+    super(scope, id, {
+      collectionName: 'my-search',
+      ...props,
+      runtimeConfigKey,
+    });
+
+    for (const { indexName, mapping } of indices) {
+      const index = new CfnIndex(this, \`Index\${indexName}\`, {
+        collectionEndpoint: this.collection.attrCollectionEndpoint,
+        indexName,
+        // Cast: \`mapping\` (from config.json, derived from zod at build time) is
+        // intentionally untyped against CfnIndex's own PropertyMappingProperty
+        // union so the mapping format stays shared with the opensearch-js
+        // client calls in sync-indices-lib.ts - both are structurally satisfied
+        // at runtime.
+        mappings: mapping as CfnIndex.MappingsProperty,
+      });
+      index.node.addDependency(this.collection);
+      index.node.addDependency(this.accessPolicy);
+    }
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project 3`] = `
+"export * from './my-search.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate the opensearch project 4`] = `
+"export * from './opensearch/index.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/common/scripts/src/opensearch/create-local-indices.ts 1`] = `
+"import { readFileSync } from 'fs';
+import { Client } from '@opensearch-project/opensearch';
+import {
+  ensureIndex,
+  loadIndexDefinitions,
+  waitForCluster,
+} from './sync-indices-lib.js';
+
+const { port } = JSON.parse(readFileSync('config.json', 'utf-8')).localDev;
+
+const client = new Client({ node: \`http://localhost:\${port}\` });
+
+await waitForCluster(client);
+
+for (const { indexName, mapping } of await loadIndexDefinitions()) {
+  await ensureIndex(client, indexName, mapping);
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/common/scripts/src/opensearch/pull-image.ts 1`] = `
+"import { spawnSync } from 'child_process';
+import { readFileSync } from 'fs';
+
+const { containerEngine, image } = JSON.parse(
+  readFileSync('config.json', 'utf-8'),
+).localDev;
+
+const inspect = spawnSync(containerEngine, ['image', 'inspect', image], {
+  stdio: 'ignore',
+});
+if (inspect.status !== 0) {
+  const pull = spawnSync(containerEngine, ['pull', image], {
+    stdio: 'inherit',
+  });
+  if (pull.status !== 0) {
+    process.exit(pull.status ?? 1);
+  }
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/common/scripts/src/opensearch/start-container.ts 1`] = `
+"import { spawn, spawnSync } from 'child_process';
+import { readFileSync } from 'fs';
+
+const { containerEngine, containerName, image, port } = JSON.parse(
+  readFileSync('config.json', 'utf-8'),
+).localDev;
+
+const containerExists = (): boolean =>
+  spawnSync(containerEngine, ['container', 'inspect', containerName], {
+    stdio: 'ignore',
+  }).status === 0;
+
+const isRunning = (): boolean => {
+  const result = spawnSync(
+    containerEngine,
+    ['container', 'inspect', '-f', '{{.State.Running}}', containerName],
+    { encoding: 'utf-8' },
+  );
+  return result.status === 0 && result.stdout.trim() === 'true';
+};
+
+// Ensure the image is available locally before starting the container.
+const ensureImage = (): void => {
+  const inspect = spawnSync(containerEngine, ['image', 'inspect', image], {
+    stdio: 'ignore',
+  });
+  if (inspect.status !== 0) {
+    const pull = spawnSync(containerEngine, ['pull', image], {
+      stdio: 'inherit',
+    });
+    if (pull.status !== 0) process.exit(pull.status ?? 1);
+  }
+};
+
+// Multiple OpenSearch packages run dev in parallel sharing the same
+// container. All processes stream logs, but only the one that created the
+// container stops it on exit — others just detach.
+let created = false;
+let runRetries = 0;
+
+ensureImage();
+
+for (;;) {
+  if (containerExists()) {
+    if (!isRunning()) {
+      // Another process may have started it between our inspect and start — container engine start
+      // exits 0 even if the container is already running, so no special-casing needed.
+      const start = spawnSync(containerEngine, ['start', containerName], {
+        stdio: 'inherit',
+      });
+      if (start.status !== 0) process.exit(start.status ?? 1);
+    }
+    break;
+  }
+  const runArgs = [
+    'run',
+    ...(containerEngine === 'docker' ? ['--rm'] : []),
+    '--name',
+    containerName,
+    '-p',
+    \`\${port}:9200\`,
+    '-e',
+    'discovery.type=single-node',
+    '-e',
+    'plugins.security.disabled=true',
+    '-e',
+    'DISABLE_INSTALL_DEMO_CONFIG=true',
+    '-e',
+    'DISABLE_SECURITY_PLUGIN=true',
+    '-v',
+    \`\${containerName}-data:/usr/share/opensearch/data\`,
+    '-d',
+    image,
+  ];
+  const create = spawnSync(containerEngine, runArgs, { stdio: 'pipe' });
+  if (create.status === 0) {
+    created = true;
+    break;
+  }
+  if (!containerExists() && ++runRetries > 3) {
+    process.stderr.write(create.stderr);
+    process.exit(create.status ?? 1);
+  }
+}
+
+const logs = spawn(containerEngine, ['logs', '-f', containerName], {
+  stdio: ['ignore', 'inherit', 'inherit'],
+});
+
+let exiting = false;
+
+const cleanup = () => {
+  if (exiting) return;
+  exiting = true;
+  if (created) {
+    if (containerEngine === 'docker') {
+      spawnSync(containerEngine, ['stop', containerName], { stdio: 'ignore' });
+    } else {
+      spawnSync(containerEngine, ['rm', '-f', containerName], {
+        stdio: 'ignore',
+      });
+    }
+  }
+  logs.kill();
+  process.exit(0);
+};
+
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+process.on('SIGHUP', cleanup);
+
+logs.on('exit', (code) => {
+  if (!exiting) process.exit(code ?? 0);
+});
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/common/scripts/src/opensearch/sync-index-mappings.ts 1`] = `
+"import { readFileSync, writeFileSync } from 'fs';
+import { loadIndexDefinitions } from './sync-indices-lib.js';
+
+// Runs as a build step (see the \`sync-mappings\` target) so config.json's
+// \`indices\` is always a fresh snapshot of the zod schemas under src/indices/.
+// The CDK app construct (a different Nx project, so it can't import these zod
+// modules directly at synth time) reads this snapshot to declare a
+// \`CfnIndex\` per index - the same reason DynamoDB's GSIs are snapshotted into
+// config.json rather than read from the entity source directly.
+const configPath = 'config.json';
+const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+
+config.indices = (await loadIndexDefinitions()).map(
+  ({ indexName, mapping }) => ({
+    indexName,
+    mapping: mapping.mappings,
+  }),
+);
+
+writeFileSync(configPath, \`\${JSON.stringify(config, null, 2)}\\n\`);
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/common/scripts/src/opensearch/sync-indices.ts 1`] = `
+"import { Client } from '@opensearch-project/opensearch';
+import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import {
+  ensureIndex,
+  loadIndexDefinitions,
+  waitForCluster,
+} from './sync-indices-lib.js';
+
+// Invoked by the Terraform module (via a null_resource local-exec) after the
+// collection is created, using the deployer's own AWS credentials - Terraform
+// has no native resource for OpenSearch Serverless indices, unlike CDK's
+// \`AWS::OpenSearchServerless::Index\`, so this runs the same sync logic used
+// for local dev against the real collection instead.
+const collectionEndpoint = process.env.OPENSEARCH_COLLECTION_ENDPOINT;
+const region = process.env.AWS_REGION;
+if (!collectionEndpoint || !region) {
+  throw new Error(
+    'OPENSEARCH_COLLECTION_ENDPOINT and AWS_REGION environment variables are required',
+  );
+}
+
+const client = new Client({
+  ...AwsSigv4Signer({
+    region,
+    service: 'aoss',
+    getCredentials: () => defaultProvider()(),
+  }),
+  node: collectionEndpoint,
+});
+
+await waitForCluster(client);
+
+for (const { indexName, mapping } of await loadIndexDefinitions()) {
+  await ensureIndex(client, indexName, mapping);
+}
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/common/scripts/src/opensearch/sync-indices-lib.ts 1`] = `
+"import { readdirSync } from 'fs';
+import { resolve } from 'path';
+import { pathToFileURL } from 'url';
+import type { Client } from '@opensearch-project/opensearch';
+
+// Structurally matches OpenSearchIndexDefinition/zodSchemaToOpenSearchMapping
+// from the calling project's generated src/zod-to-mapping.ts. Declared locally
+// rather than imported: this module is shared across every ts#opensearch
+// project, each with its own zod-to-mapping.ts at a different relative path,
+// so the module it loads at runtime (below) can only be resolved dynamically.
+interface OpenSearchIndexDefinition {
+  indexName: string;
+  schema: { parse: (value: unknown) => unknown };
+}
+type OpenSearchMapping = { mappings: { properties: Record<string, unknown> } };
+type ZodToMappingModule = {
+  zodSchemaToOpenSearchMapping: (schema: unknown) => OpenSearchMapping;
+  isOpenSearchIndexDefinition: (
+    value: unknown,
+  ) => value is OpenSearchIndexDefinition;
+};
+
+export interface ResolvedIndex {
+  indexName: string;
+  mapping: OpenSearchMapping;
+}
+
+// Always invoked with cwd set to the calling project's root, so the project's
+// own zod schemas (the single source of truth for each index's mapping) are
+// resolved relative to process.cwd() rather than this module's own location.
+export const loadIndexDefinitions = async (): Promise<ResolvedIndex[]> => {
+  const { zodSchemaToOpenSearchMapping, isOpenSearchIndexDefinition } =
+    (await import(
+      pathToFileURL(resolve('src/zod-to-mapping.ts')).href
+    )) as ZodToMappingModule;
+
+  const indicesDir = resolve('src/indices');
+  const files = readdirSync(indicesDir).filter(
+    (f) => f.endsWith('.ts') && f !== 'index.ts',
+  );
+  const modules = await Promise.all(
+    files.map((f) => import(pathToFileURL(resolve(indicesDir, f)).href)),
+  );
+  const definitions = modules.flatMap((mod) =>
+    Object.values(mod).filter(isOpenSearchIndexDefinition),
+  );
+
+  return definitions.map(({ indexName, schema }) => ({
+    indexName,
+    mapping: zodSchemaToOpenSearchMapping(schema),
+  }));
+};
+
+export const waitForCluster = async (client: Client): Promise<void> => {
+  for (;;) {
+    try {
+      await client.cluster.health({}, { requestTimeout: 10000 });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+};
+
+export const ensureIndex = async (
+  client: Client,
+  indexName: string,
+  mapping: OpenSearchMapping,
+): Promise<void> => {
+  const { body: exists } = await client.indices.exists(
+    { index: indexName },
+    { requestTimeout: 10000 },
+  );
+  if (!exists) {
+    // Cast: \`mapping\` is intentionally untyped against opensearch-js's own
+    // \`Property\` union (a closed set of concrete field-mapping shapes) so this
+    // module stays framework-agnostic - the same mapping also has to satisfy
+    // CDK's independently-typed \`CfnIndex.MappingsProperty\` (see the app
+    // construct template), and both are structurally satisfied at runtime.
+    await client.indices.create(
+      { index: indexName, body: mapping as any },
+      { requestTimeout: 10000 },
+    );
+    console.log(\`Created index: \${indexName}\`);
+    return;
+  }
+  // Existing index: OpenSearch only allows adding new fields via putMapping -
+  // changing or removing an existing field's mapping is rejected. A breaking
+  // schema change requires the standard reindex-and-alias-swap approach.
+  await client.indices.putMapping(
+    { index: indexName, body: mapping.mappings as any },
+    { requestTimeout: 10000 },
+  );
+  console.log(\`Updated mapping: \${indexName}\`);
+};
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/src/client.ts 1`] = `
+"import { Client } from '@opensearch-project/opensearch';
+import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Generated: must match runtimeConfigKey in config.json
+const runtimeConfigKey = 'MySearch';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// config.json is only present in local dev (not included in the deployed bundle); guard with LOCAL_DEV check
+const localDev = () =>
+  JSON.parse(readFileSync(join(__dirname, '../config.json'), 'utf-8')).localDev;
+
+type OpenSearchConfig = {
+  collectionEndpoint: string;
+  region: string;
+};
+
+let _config: OpenSearchConfig | undefined;
+
+// Resolves both the endpoint and region together since the SigV4 signer needs
+// the collection's region, which (unlike DynamoDB's fixed regional endpoint)
+// varies per-collection and so must come from the same runtime config lookup.
+const resolveConfig = async (): Promise<OpenSearchConfig> => {
+  if (process.env.LOCAL_DEV === 'true') {
+    const { port } = localDev();
+    return {
+      collectionEndpoint: \`http://localhost:\${port}\`,
+      region: 'us-east-1',
+    };
+  }
+  if (_config === undefined) {
+    const appId = process.env.RUNTIME_CONFIG_APP_ID;
+    if (!appId) {
+      throw new Error('RUNTIME_CONFIG_APP_ID environment variable is not set');
+    }
+    const config = await getAppConfig<{
+      [key: string]: OpenSearchConfig | undefined;
+    }>('opensearch', {
+      application: appId,
+      environment: 'default',
+      transform: 'json',
+    });
+    const resolved = config?.[runtimeConfigKey];
+    if (!resolved?.collectionEndpoint) {
+      throw new Error(
+        'Could not resolve OpenSearch collection endpoint from runtime config',
+      );
+    }
+    _config = resolved;
+  }
+  return _config;
+};
+
+export const resolveCollectionEndpoint = async (): Promise<string> =>
+  (await resolveConfig()).collectionEndpoint;
+
+let _client: Client | undefined;
+
+// Unlike getDynamoDBClient, this is async: the collection endpoint (the
+// client's \`node\`) must be resolved before the client can be constructed,
+// rather than being a fixed regional endpoint known up front.
+export const getOpenSearchClient = async (): Promise<Client> => {
+  if (!_client) {
+    const { collectionEndpoint, region } = await resolveConfig();
+    _client =
+      process.env.LOCAL_DEV === 'true'
+        ? new Client({ node: collectionEndpoint })
+        : new Client({
+            ...AwsSigv4Signer({
+              region,
+              service: 'aoss',
+              getCredentials: () => defaultProvider()(),
+            }),
+            node: collectionEndpoint,
+          });
+  }
+  return _client;
+};
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/src/index.ts 1`] = `
+"export { getOpenSearchClient, resolveCollectionEndpoint } from './client.js';
+export * from './indices/index.js';
+export * from './zod-to-mapping.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/src/indices/example.ts 1`] = `
+"import { z } from 'zod';
+import type { OpenSearchIndexDefinition } from '../zod-to-mapping.js';
+
+export const exampleIndexName = 'example';
+
+// Example index schema - replace with your own. zod is the single source of
+// truth: this schema both validates documents and derives the OpenSearch index
+// mapping (see ../zod-to-mapping.js). Use \`.meta({ opensearch: {...} })\` where
+// zod's type system doesn't distinguish an OpenSearch field type (eg. \`keyword\`
+// vs \`text\`) or has no equivalent at all (eg. \`knn_vector\` for vector search).
+export const ExampleDocument = z.object({
+  id: z.string(),
+  title: z.string(),
+  category: z.string().meta({ opensearch: { type: 'keyword' } }),
+  createdAt: z.iso.datetime(),
+  // A vector field for semantic/RAG search. Adjust \`dimension\` to match your
+  // embedding model's output size.
+  embedding: z
+    .array(z.number())
+    .meta({ opensearch: { type: 'knn_vector', dimension: 1536 } }),
+});
+
+export type ExampleDocument = z.infer<typeof ExampleDocument>;
+
+// Discovered by local-dev and deploy-time index sync tooling - export one of
+// these per index module.
+export const exampleIndexDefinition: OpenSearchIndexDefinition<
+  typeof ExampleDocument
+> = {
+  indexName: exampleIndexName,
+  schema: ExampleDocument,
+};
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/src/indices/index.ts 1`] = `
+"export * from './example.js';
+"
+`;
+
+exports[`ts#opensearch generator > should generate with infra=none then upgrade to infra=serverless > packages/my-search/src/zod-to-mapping.ts 1`] = `
+"import { z } from 'zod';
+
+// OpenSearch-specific mapping overrides for a field, set via \`.meta({ opensearch: {...} })\`.
+// Needed wherever zod's type system doesn't distinguish an OpenSearch field type
+// (eg. \`keyword\` vs \`text\`) or has no equivalent at all (eg. \`knn_vector\`, \`geo_point\`).
+export interface OpenSearchFieldOverride {
+  type?: string;
+  dimension?: number;
+  method?: {
+    name?: string;
+    spaceType?: string;
+    engine?: string;
+    parameters?: Record<string, unknown>;
+  };
+  [key: string]: unknown;
+}
+
+interface JsonSchemaNode {
+  type?: string | string[];
+  format?: string;
+  properties?: Record<string, JsonSchemaNode>;
+  items?: JsonSchemaNode;
+  opensearch?: OpenSearchFieldOverride;
+}
+
+const inferType = (node: JsonSchemaNode): string => {
+  const type = Array.isArray(node.type) ? node.type[0] : node.type;
+  switch (type) {
+    case 'string':
+      return node.format === 'date-time' ? 'date' : 'text';
+    case 'number':
+      return 'float';
+    case 'integer':
+      return 'long';
+    case 'boolean':
+      return 'boolean';
+    case 'object':
+      return 'object';
+    default:
+      return 'text';
+  }
+};
+
+const nodeToProperty = (node: JsonSchemaNode): Record<string, unknown> => {
+  if (node.opensearch) {
+    const { type, ...rest } = node.opensearch;
+    return { type: type ?? inferType(node), ...rest };
+  }
+
+  const type = Array.isArray(node.type) ? node.type[0] : node.type;
+
+  if (type === 'object' && node.properties) {
+    return {
+      type: 'object',
+      properties: Object.fromEntries(
+        Object.entries(node.properties).map(([key, value]) => [
+          key,
+          nodeToProperty(value),
+        ]),
+      ),
+    };
+  }
+
+  if (type === 'array' && node.items) {
+    // OpenSearch has no distinct array mapping type - an array of primitives
+    // maps the same way as a single value of that type would.
+    return nodeToProperty(node.items);
+  }
+
+  return { type: inferType(node) };
+};
+
+/**
+ * Derives an OpenSearch index mapping from a zod object schema. Field types are
+ * inferred from the zod shape; use \`.meta({ opensearch: {...} })\` on a field to
+ * override the inferred type or add mapping parameters (eg. \`knn_vector\`
+ * dimension/method for vector search fields).
+ */
+export const zodSchemaToOpenSearchMapping = (
+  schema: z.ZodObject<any>,
+): { mappings: { properties: Record<string, unknown> } } => {
+  const jsonSchema = z.toJSONSchema(schema, {
+    io: 'output',
+  }) as JsonSchemaNode;
+  const properties = jsonSchema.properties ?? {};
+  return {
+    mappings: {
+      properties: Object.fromEntries(
+        Object.entries(properties).map(([key, value]) => [
+          key,
+          nodeToProperty(value),
+        ]),
+      ),
+    },
+  };
+};
+
+// Pairs an index name with the zod schema that defines its documents. Export
+// one of these per index module (see indices/example.ts) so local-dev and
+// deploy-time tooling can discover every index in the project without relying
+// on file/export naming conventions.
+export interface OpenSearchIndexDefinition<
+  T extends z.ZodObject<any> = z.ZodObject<any>,
+> {
+  indexName: string;
+  schema: T;
+}
+
+export const isOpenSearchIndexDefinition = (
+  value: unknown,
+): value is OpenSearchIndexDefinition =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as OpenSearchIndexDefinition).indexName === 'string' &&
+  typeof (value as OpenSearchIndexDefinition).schema?.parse === 'function';
+"
+`;

@@ -1,0 +1,7 @@
+---
+title: OpenSearch Local Development
+---
+
+The `connection` generator configures your project's `dev` target to depend on the OpenSearch project's `dev` target. The local OpenSearch container will start automatically alongside your project when running `dev`.
+
+The `LOCAL_DEV=true` environment variable is set automatically, so `getOpenSearchClient()` and `resolveCollectionEndpoint()` connect to the local container instead of AWS.

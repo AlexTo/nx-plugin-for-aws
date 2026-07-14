@@ -1,0 +1,165 @@
+---
+title: TypeScript OpenSearch
+description: Create a TypeScript OpenSearch project
+generator: ts#opensearch
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+import Link from '@components/link.astro';
+import RunGenerator from '@components/run-generator.astro';
+import GeneratorParameters from '@components/generator-parameters.astro';
+import Snippet from '@components/snippet.astro';
+import Infrastructure from '@components/infrastructure.astro';
+
+This generator creates a new TypeScript project backed by [Amazon OpenSearch Serverless](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/serverless.html), using [opensearch-js](https://github.com/opensearch-project/opensearch-js) as the client and [zod](https://zod.dev/) as the single source of truth for each index's document schema and mapping — useful for full-text search and, with its built-in `knn_vector` field support, vector/semantic search for RAG.
+
+## Usage
+
+### Generate a TypeScript OpenSearch Project
+
+<RunGenerator generator="ts#opensearch" />
+
+### Options
+
+<GeneratorParameters generator="ts#opensearch" />
+
+## Generator Output
+
+The generator creates the following project structure in the `<directory>/<name>` directory:
+
+<FileTree>
+  - src
+    - index.ts Project entry point and exports
+    - client.ts OpenSearch client singleton and collection endpoint resolution
+    - zod-to-mapping.ts Derives an OpenSearch index mapping from a zod schema
+    - indices
+      - example.ts Example index schema definition
+      - index.ts Index exports
+  - config.json Local development settings, and (once built) a snapshot of every index's derived mapping
+  - project.json Project configuration and build targets
+</FileTree>
+
+The local development scripts, and the index-sync scripts used both for local dev and (for Terraform) at deploy time, are shared across all `ts#opensearch` projects and generated once into:
+
+<FileTree>
+  - packages/common/scripts/src/opensearch
+    - sync-indices-lib.ts Shared logic for discovering indices and creating/updating them
+    - create-local-indices.ts Syncs indices against the local OpenSearch container
+    - sync-indices.ts Syncs indices against a real collection (used by the Terraform deploy path)
+    - sync-index-mappings.ts Build step: snapshots each index's zod-derived mapping into config.json
+    - pull-image.ts Pulls the local OpenSearch image
+    - start-container.ts Starts the local OpenSearch container
+</FileTree>
+
+### Infrastructure
+
+<Snippet name="opensearch/infrastructure" />
+
+## Local Development
+
+<Snippet name="opensearch/local-dev-start" />
+
+## Defining Indices
+
+zod is the single source of truth for each index: the same schema validates documents *and* derives the OpenSearch index mapping (via `zodSchemaToOpenSearchMapping` in `src/zod-to-mapping.ts`). Add or update index files under `src/indices/`, exporting an `OpenSearchIndexDefinition` — a `{ indexName, schema }` pair — so local-dev and deploy-time tooling can discover it:
+
+```ts title="packages/my-search/src/indices/example.ts"
+import { z } from 'zod';
+import type { OpenSearchIndexDefinition } from '../zod-to-mapping.js';
+
+export const exampleIndexName = 'example';
+
+export const ExampleDocument = z.object({
+  id: z.string(),
+  title: z.string(),
+  category: z.string().meta({ opensearch: { type: 'keyword' } }),
+  createdAt: z.iso.datetime(),
+  embedding: z
+    .array(z.number())
+    .meta({ opensearch: { type: 'knn_vector', dimension: 1536 } }),
+});
+export type ExampleDocument = z.infer<typeof ExampleDocument>;
+
+export const exampleIndexDefinition: OpenSearchIndexDefinition<typeof ExampleDocument> = {
+  indexName: exampleIndexName,
+  schema: ExampleDocument,
+};
+```
+
+### Mapping Inference
+
+Field types are inferred from the zod shape by default:
+
+| zod type | Inferred OpenSearch type |
+|---|---|
+| `z.string()` | `text` |
+| `z.iso.datetime()` / `z.date()` | `date` |
+| `z.number()` | `float` |
+| `z.number().int()` | `long` |
+| `z.boolean()` | `boolean` |
+| `z.object({...})` | `object` (nested `properties`) |
+| `z.array(x)` | same mapping as `x` (OpenSearch has no distinct array type) |
+
+Use `.meta({ opensearch: {...} })` on any field to override the inferred type or supply OpenSearch-specific mapping parameters — most importantly `knn_vector` for vector/semantic search fields, which zod has no equivalent type for:
+
+```ts
+embedding: z.array(z.number()).meta({
+  opensearch: { type: 'knn_vector', dimension: 1536 },
+}),
+```
+
+:::caution[Mapping updates are additive only]
+OpenSearch allows *adding* new fields to an existing index's mapping, but rejects a change to an existing field's type (or removing a field) — there's no automated migration. A breaking schema change (e.g. resizing a `knn_vector` dimension) requires the standard OpenSearch operational pattern: create a new index, reindex your data into it, and swap over (e.g. via an alias). Plan for this if you expect breaking changes to a field already in use.
+:::
+
+## Using the OpenSearch Client
+
+The generated `src/client.ts` exports:
+
+- `getOpenSearchClient()` — an async function returning a cached singleton `opensearch-js` `Client`. When `LOCAL_DEV=true`, connects to the local container with no auth; otherwise signs requests with SigV4 (`service: 'aoss'`) using the default AWS credential chain. Unlike DynamoDB's client, this is async — the collection endpoint must be resolved (from AppConfig or `config.json`) before the client can be constructed.
+- `resolveCollectionEndpoint()` — resolves just the endpoint, following the same local-dev/AppConfig resolution.
+
+```ts
+import { getOpenSearchClient } from ':my-scope/my-search';
+import { exampleIndexName } from ':my-scope/my-search';
+
+const client = await getOpenSearchClient();
+const { body } = await client.search({
+  index: exampleIndexName,
+  body: { query: { match: { title: 'hello' } } },
+});
+```
+
+:::note[Runtime config]
+When running in AWS, the client resolves the collection endpoint from AWS AppConfig using the `RUNTIME_CONFIG_APP_ID` environment variable. Projects built with this plugin (tRPC APIs, Smithy APIs, agents, MCP servers) already have this variable configured automatically. For other TypeScript projects, ensure `RUNTIME_CONFIG_APP_ID` is set in the runtime environment. For more information, see the <Link path="guides/runtime-config">Runtime Configuration guide</Link>.
+:::
+
+## How Indices Get Created at Deploy Time
+
+<Infrastructure>
+<Fragment slot="cdk">
+The per-project CDK construct declares a native `AWS::OpenSearchServerless::Index` (`CfnIndex`) resource for every index found in `config.json`'s `indices` snapshot (refreshed on every build by the `sync-mappings` target — see below). This is fully declarative: CloudFormation creates and updates each index as part of the normal stack deployment, with no custom Lambda involved.
+</Fragment>
+<Fragment slot="terraform">
+Terraform's AWS provider has no equivalent resource yet for OpenSearch Serverless indices. Instead, the generated module runs a `null_resource` with a `local-exec` provisioner that invokes the same sync script used for local dev (`sync-indices.ts`), pointed at the real collection endpoint and signing with the credentials of whoever runs `terraform apply`. It reruns whenever the mapping snapshot in `config.json` changes.
+
+Because this is a data-plane operation, the identity running `terraform apply` needs its own data access grant on the collection — the generated module includes this automatically via `data.aws_caller_identity.current`, alongside any grants you pass through `data_access_grants`.
+</Fragment>
+</Infrastructure>
+
+Both paths are fed by the **`sync-mappings`** build target: it computes each index's mapping from its zod schema and writes the result into `config.json`'s `indices` field, so infrastructure code (which lives in a different Nx project and can't import your zod schemas directly at synth time) always reflects the current schema. This runs automatically as part of `build` — no separate step required.
+
+## IAM / Data Access
+
+Unlike DynamoDB or RDS, OpenSearch Serverless data-plane access (searching, indexing documents, creating indices) requires **two** things at once: an identity-based IAM permission *and* an entry in the collection's data access policy naming the specific principal. A plain `iam:PassRole`-style grant is not sufficient on its own.
+
+<Snippet name="connection/lambda-opensearch-access" parentHeading="IAM / Data Access" />
+
+## Connections
+
+Use the <Link path="guides/connection">`connection`</Link> generator to integrate this project with others in your workspace. The following connections involve this project:
+
+- <Link path="guides/connection/trpc-opensearch">tRPC API to TypeScript OpenSearch</Link>
+- <Link path="guides/connection/smithy-opensearch">Smithy API to TypeScript OpenSearch</Link>
+- <Link path="guides/connection/ts-agent-opensearch">TypeScript Agent to TypeScript OpenSearch</Link>
+- <Link path="guides/connection/ts-mcp-server-opensearch">MCP Server to TypeScript OpenSearch</Link>

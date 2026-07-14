@@ -16,6 +16,7 @@ export const SUPPORTED_PROJECT_TYPES = [
   'py#rdb',
   'ts#dynamodb',
   'py#dynamodb',
+  'ts#opensearch',
   'agentcore-gateway',
 ] as const;
 
@@ -30,6 +31,10 @@ export const SUPPORTED_CONNECTIONS = [
   { source: 'ts#smithy-api', target: 'ts#dynamodb' },
   { source: 'ts#mcp-server', target: 'ts#rdb' },
   { source: 'ts#mcp-server', target: 'ts#dynamodb' },
+  { source: 'ts#trpc-api', target: 'ts#opensearch' },
+  { source: 'ts#agent', target: 'ts#opensearch' },
+  { source: 'ts#smithy-api', target: 'ts#opensearch' },
+  { source: 'ts#mcp-server', target: 'ts#opensearch' },
   { source: 'ts#react-website', target: 'ts#trpc-api' },
   { source: 'ts#react-website', target: 'py#fast-api' },
   { source: 'ts#react-website', target: 'ts#smithy-api' },

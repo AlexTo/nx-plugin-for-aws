@@ -1,0 +1,13 @@
+import { readFileSync } from 'fs';
+import { Client } from '@opensearch-project/opensearch';
+import { ensureIndex, loadIndexDefinitions, waitForCluster } from './sync-indices-lib.js';
+
+const { port } = JSON.parse(readFileSync('config.json', 'utf-8')).localDev;
+
+const client = new Client({ node: `http://localhost:${port}` });
+
+await waitForCluster(client);
+
+for (const { indexName, mapping } of await loadIndexDefinitions()) {
+  await ensureIndex(client, indexName, mapping);
+}

@@ -1,0 +1,85 @@
+import { Client } from '@opensearch-project/opensearch';
+import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
+import { readFileSync } from 'fs';
+import { join<% if (esm) { %>, dirname<% } %> } from 'path';
+<%_ if (esm) { _%>
+import { fileURLToPath } from 'url';
+<%_ } _%>
+
+// Generated: must match runtimeConfigKey in config.json
+const runtimeConfigKey = '<%= runtimeConfigKey %>';
+<% if (esm) { %>
+const __dirname = dirname(fileURLToPath(import.meta.url));
+<%_ } _%>
+// config.json is only present in local dev (not included in the deployed bundle); guard with LOCAL_DEV check
+const localDev = () =>
+  JSON.parse(readFileSync(join(__dirname, '../config.json'), 'utf-8')).localDev;
+
+type OpenSearchConfig = {
+  collectionEndpoint: string;
+  region: string;
+};
+
+let _config: OpenSearchConfig | undefined;
+
+// Resolves both the endpoint and region together since the SigV4 signer needs
+// the collection's region, which (unlike DynamoDB's fixed regional endpoint)
+// varies per-collection and so must come from the same runtime config lookup.
+const resolveConfig = async (): Promise<OpenSearchConfig> => {
+  if (process.env.LOCAL_DEV === 'true') {
+    const { port } = localDev();
+    return {
+      collectionEndpoint: `http://localhost:${port}`,
+      region: 'us-east-1',
+    };
+  }
+  if (_config === undefined) {
+    const appId = process.env.RUNTIME_CONFIG_APP_ID;
+    if (!appId) {
+      throw new Error('RUNTIME_CONFIG_APP_ID environment variable is not set');
+    }
+    const config = await getAppConfig<{
+      [key: string]: OpenSearchConfig | undefined;
+    }>('opensearch', {
+      application: appId,
+      environment: 'default',
+      transform: 'json',
+    });
+    const resolved = config?.[runtimeConfigKey];
+    if (!resolved?.collectionEndpoint) {
+      throw new Error(
+        'Could not resolve OpenSearch collection endpoint from runtime config',
+      );
+    }
+    _config = resolved;
+  }
+  return _config;
+};
+
+export const resolveCollectionEndpoint = async (): Promise<string> =>
+  (await resolveConfig()).collectionEndpoint;
+
+let _client: Client | undefined;
+
+// Unlike getDynamoDBClient, this is async: the collection endpoint (the
+// client's `node`) must be resolved before the client can be constructed,
+// rather than being a fixed regional endpoint known up front.
+export const getOpenSearchClient = async (): Promise<Client> => {
+  if (!_client) {
+    const { collectionEndpoint, region } = await resolveConfig();
+    _client =
+      process.env.LOCAL_DEV === 'true'
+        ? new Client({ node: collectionEndpoint })
+        : new Client({
+            ...AwsSigv4Signer({
+              region,
+              service: 'aoss',
+              getCredentials: () => defaultProvider()(),
+            }),
+            node: collectionEndpoint,
+          });
+  }
+  return _client;
+};

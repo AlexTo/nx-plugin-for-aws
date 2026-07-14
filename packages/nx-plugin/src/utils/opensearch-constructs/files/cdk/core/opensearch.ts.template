@@ -1,0 +1,190 @@
+import { Construct } from 'constructs';
+import { Stack } from 'aws-cdk-lib';
+import {
+  CfnAccessPolicy,
+  CfnCollection,
+  CfnCollectionProps,
+  CfnSecurityPolicy,
+} from 'aws-cdk-lib/aws-opensearchserverless';
+import { Grant, IRole } from 'aws-cdk-lib/aws-iam';
+import { Key } from 'aws-cdk-lib/aws-kms';
+import { RuntimeConfig } from './runtime-config<% if (esm) { %>.js<% } %>';
+
+type _CollectionProps = Omit<CfnCollectionProps, 'name' | 'type'>;
+
+export interface OpenSearchCollectionProps extends _CollectionProps {
+  /**
+   * The OpenSearch Serverless collection name. Must be lowercase, 3-28
+   * characters, and contain only letters, numbers and hyphens.
+   */
+  readonly collectionName: string;
+
+  /**
+   * Collection type - VECTORSEARCH for RAG/vector search workloads, SEARCH
+   * for general text search, TIMESERIES for log/metric data.
+   * @default 'VECTORSEARCH'
+   */
+  readonly type?: 'SEARCH' | 'VECTORSEARCH' | 'TIMESERIES';
+
+  /**
+   * RuntimeConfig key used under the `opensearch` namespace.
+   */
+  readonly runtimeConfigKey: string;
+
+  /**
+   * Whether to enable automatic key rotation on the KMS key used to encrypt the collection.
+   * @default true
+   */
+  readonly enableKeyRotation?: boolean;
+}
+
+// Keyed by grantee role ARN so a repeat grant to the same role widens its
+// existing Rules entry instead of appending a duplicate.
+interface AccessPolicyStatement {
+  readonly Rules: {
+    ResourceType: 'index';
+    Resource: string[];
+    Permission: string[];
+  }[];
+  readonly Principal: string[];
+}
+
+export abstract class OpenSearchCollection extends Construct {
+  public readonly collection: CfnCollection;
+  // protected (not private) so app construct subclasses can depend a CfnIndex
+  // on it - index creation must wait until the access policy, which needs to
+  // include the deploying principal, has been applied.
+  protected readonly accessPolicy: CfnAccessPolicy;
+  private readonly statementsByRoleArn = new Map<string, AccessPolicyStatement>();
+
+  constructor(
+    scope: Construct,
+    id: string,
+    {
+      collectionName,
+      type = 'VECTORSEARCH',
+      runtimeConfigKey,
+      enableKeyRotation = true,
+      ...rest
+    }: OpenSearchCollectionProps,
+  ) {
+    super(scope, id);
+
+    const key = new Key(this, 'EncryptionKey', { enableKeyRotation });
+
+    const encryptionPolicy = new CfnSecurityPolicy(this, 'EncryptionPolicy', {
+      name: `${collectionName}-encryption`,
+      type: 'encryption',
+      policy: JSON.stringify({
+        Rules: [
+          { ResourceType: 'collection', Resource: [`collection/${collectionName}`] },
+        ],
+        AWSOwnedKey: false,
+        KmsARN: key.keyArn,
+      }),
+    });
+
+    const networkPolicy = new CfnSecurityPolicy(this, 'NetworkPolicy', {
+      name: `${collectionName}-network`,
+      type: 'network',
+      policy: JSON.stringify([
+        {
+          Rules: [
+            { ResourceType: 'collection', Resource: [`collection/${collectionName}`] },
+            { ResourceType: 'dashboard', Resource: [`collection/${collectionName}`] },
+          ],
+          AllowFromPublic: true,
+        },
+      ]),
+    });
+
+    // Starts with no principals - populated by grant calls below (and must
+    // also include whichever identity deploys this stack, since creating the
+    // CfnIndex resources declared by the app construct is itself a data-plane
+    // operation gated by this policy, not just the deployer's own IAM permissions).
+    this.accessPolicy = new CfnAccessPolicy(this, 'AccessPolicy', {
+      name: `${collectionName}-access`,
+      type: 'data',
+      policy: JSON.stringify([]),
+    });
+
+    this.collection = new CfnCollection(this, 'Collection', {
+      ...rest,
+      name: collectionName,
+      type,
+    });
+    this.collection.addDependency(encryptionPolicy);
+    this.collection.addDependency(networkPolicy);
+    this.collection.node.addDependency(this.accessPolicy);
+
+    const rc = RuntimeConfig.ensure(this);
+    rc.set('opensearch', runtimeConfigKey, {
+      collectionEndpoint: this.collection.attrCollectionEndpoint,
+      region: Stack.of(this).region,
+    });
+  }
+
+  /** Grants read (search/get document) access to every index in the collection. */
+  public grantReadData(grantee: IRole): Grant {
+    return this.grant(grantee, ['aoss:ReadDocument']);
+  }
+
+  /** Grants write (index/update/delete document, create/update/delete index) access. */
+  public grantWriteData(grantee: IRole): Grant {
+    return this.grant(grantee, [
+      'aoss:CreateIndex',
+      'aoss:UpdateIndex',
+      'aoss:DeleteIndex',
+      'aoss:WriteDocument',
+    ]);
+  }
+
+  /** Grants both read and write access. */
+  public grantReadWriteData(grantee: IRole): Grant {
+    return this.grant(grantee, [
+      'aoss:CreateIndex',
+      'aoss:UpdateIndex',
+      'aoss:DeleteIndex',
+      'aoss:ReadDocument',
+      'aoss:WriteDocument',
+    ]);
+  }
+
+  /**
+   * Grants OpenSearch Serverless data-plane access. Unlike a typical CDK
+   * resource grant, this requires two halves that AOSS checks on every
+   * request: an identity-based IAM policy statement (`Grant.addToPrincipal`,
+   * as usual) *and* an entry in the collection's data access policy naming the
+   * grantee's role ARN and the index-level permissions it's allowed. Takes
+   * `IRole` rather than the broader `IGrantable` because an access policy
+   * statement must reference a concrete IAM principal ARN, which isn't
+   * available on every `IGrantable` (e.g. a `ServicePrincipal`).
+   */
+  private grant(grantee: IRole, indexPermissions: string[]): Grant {
+    const existing = this.statementsByRoleArn.get(grantee.roleArn);
+    if (existing) {
+      const rule = existing.Rules[0];
+      rule.Permission = [...new Set([...rule.Permission, ...indexPermissions])];
+    } else {
+      this.statementsByRoleArn.set(grantee.roleArn, {
+        Principal: [grantee.roleArn],
+        Rules: [
+          {
+            ResourceType: 'index',
+            Resource: [`index/${this.collection.name}/*`],
+            Permission: [...indexPermissions],
+          },
+        ],
+      });
+    }
+    this.accessPolicy.policy = JSON.stringify([
+      ...this.statementsByRoleArn.values(),
+    ]);
+
+    return Grant.addToPrincipal({
+      grantee,
+      actions: ['aoss:APIAccessAll'],
+      resourceArns: [this.collection.attrArn],
+    });
+  }
+}

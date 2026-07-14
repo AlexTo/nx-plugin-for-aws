@@ -1,0 +1,67 @@
+---
+title: tRPC API to OpenSearch
+description: Connect a tRPC API to a TypeScript OpenSearch project
+when:
+  sourceType: ts#trpc-api
+  targetType: ts#opensearch
+---
+import { FileTree } from '@astrojs/starlight/components';
+import Link from '@components/link.astro';
+import RunGenerator from '@components/run-generator.astro';
+import GeneratorParameters from '@components/generator-parameters.astro';
+import NxCommands from '@components/nx-commands.astro';
+import Snippet from '@components/snippet.astro';
+
+The `connection` generator wires a <Link path="guides/trpc">tRPC API</Link> to a <Link path="guides/ts-opensearch">TypeScript OpenSearch</Link> project, configuring local development so both start together automatically.
+
+## Prerequisites
+
+Before using this generator, ensure you have:
+
+1. A <Link path="guides/trpc">tRPC API</Link> project (generated with `ts#api`)
+2. A <Link path="guides/ts-opensearch">`ts#opensearch`</Link> project
+
+## Usage
+
+### Run the Generator
+
+<RunGenerator generator="connection" />
+
+Select your tRPC API project as the source and your OpenSearch project as the target.
+
+### Options
+
+<GeneratorParameters generator="connection" />
+
+## Generator Output
+
+The generator updates your tRPC API's `project.json` to add a dependency from its `dev` target to the OpenSearch project's `dev` target. No source files are modified.
+
+## Using OpenSearch in Procedures
+
+Import the client and index schema from the OpenSearch package and use them inside your tRPC procedures:
+
+```ts title="packages/api/src/procedures/example.ts"
+import { getOpenSearchClient, exampleIndexName } from ':my-scope/my-search';
+import { publicProcedure } from '../init.js';
+import { z } from 'zod';
+
+export const searchExamples = publicProcedure
+  .input(z.object({ query: z.string() }))
+  .query(async ({ input }) => {
+    const client = await getOpenSearchClient();
+    const { body } = await client.search({
+      index: exampleIndexName,
+      body: { query: { match: { title: input.query } } },
+    });
+    return body.hits.hits.map((hit: any) => hit._source);
+  });
+```
+
+## Infrastructure
+
+<Snippet name="connection/lambda-opensearch-access" />
+
+## Local Development
+
+<Snippet name="connection/opensearch-local-development" />

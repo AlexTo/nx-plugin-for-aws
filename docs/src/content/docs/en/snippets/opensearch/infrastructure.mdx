@@ -1,0 +1,33 @@
+---
+title: OpenSearch Infrastructure
+---
+import { FileTree } from '@astrojs/starlight/components';
+import Infrastructure from '@components/infrastructure.astro';
+import Snippet from '@components/snippet.astro';
+
+<Snippet name="shared-constructs" />
+
+<Infrastructure>
+  <Fragment slot="cdk">
+    <FileTree>
+      - packages/common/constructs/src
+        - app
+          - opensearch
+            - \<name>.ts Infrastructure specific to your collection, incl. its indices
+        - core
+          - opensearch.ts Generic OpenSearch Serverless collection construct
+    </FileTree>
+  </Fragment>
+  <Fragment slot="terraform">
+    <FileTree>
+      - packages/common/terraform/src
+        - app
+          - opensearch
+            - \<name>
+              - \<name>.tf Module specific to your collection, incl. index sync
+        - core
+          - opensearch
+            - opensearch.tf Generic OpenSearch Serverless collection module
+    </FileTree>
+  </Fragment>
+</Infrastructure>

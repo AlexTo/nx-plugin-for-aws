@@ -1,0 +1,77 @@
+---
+title: MCP Server to OpenSearch
+description: Connect a TypeScript MCP Server to a TypeScript OpenSearch project
+when:
+  sourceType: ts#mcp-server
+  targetType: ts#opensearch
+---
+import Link from '@components/link.astro';
+import RunGenerator from '@components/run-generator.astro';
+import GeneratorParameters from '@components/generator-parameters.astro';
+import NxCommands from '@components/nx-commands.astro';
+import Snippet from '@components/snippet.astro';
+
+The `connection` generator wires a <Link path="guides/ts-mcp-server">TypeScript MCP Server</Link> to a <Link path="guides/ts-opensearch">TypeScript OpenSearch</Link> project, configuring local development so both start together automatically.
+
+## Prerequisites
+
+Before using this generator, ensure you have:
+
+1. A <Link path="guides/ts-mcp-server">`ts#mcp-server`</Link> project
+2. A <Link path="guides/ts-opensearch">`ts#opensearch`</Link> project
+
+## Usage
+
+### Run the Generator
+
+<RunGenerator generator="connection" />
+
+Select your MCP server project as the source and your OpenSearch project as the target. If the project contains multiple MCP server components, specify `sourceComponent` to disambiguate.
+
+### Options
+
+<GeneratorParameters generator="connection" />
+
+## Generator Output
+
+The generator updates the MCP server's `<mcp-server-name>-dev` target in `project.json` to depend on the OpenSearch project's `dev` target. No source files are modified.
+
+## Using OpenSearch in Tools
+
+Import the client and index schema from the OpenSearch package and use them inside `createServer`:
+
+```ts title="packages/my-service/src/my-mcp/server.ts"
+import { getOpenSearchClient, exampleIndexName } from ':my-scope/my-search';
+
+export const createServer = async () => {
+  const server = new McpServer({ name: 'my-service', version: '1.0.0' });
+
+  server.tool(
+    'search_examples',
+    'Search example items by title',
+    { query: z.string() },
+    async ({ query }) => {
+      const client = await getOpenSearchClient();
+      const { body } = await client.search({
+        index: exampleIndexName,
+        body: { query: { match: { title: query } } },
+      });
+      return {
+        content: [
+          { type: 'text', text: JSON.stringify(body.hits.hits.map((hit: any) => hit._source)) },
+        ],
+      };
+    },
+  );
+
+  return server;
+};
+```
+
+## Infrastructure
+
+<Snippet name="connection/lambda-opensearch-access" />
+
+## Local Development
+
+<Snippet name="connection/opensearch-local-development" />

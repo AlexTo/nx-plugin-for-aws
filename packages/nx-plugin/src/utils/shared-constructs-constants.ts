@@ -16,3 +16,5 @@ export const SHARED_SCRIPTS_NAME = 'common-scripts';
 export const SHARED_SCRIPTS_DIR = 'common/scripts';
 
 export const DYNAMODB_GENERATOR_IDS = ['ts#dynamodb', 'py#dynamodb'];
+
+export const OPENSEARCH_GENERATOR_IDS = ['ts#opensearch'];

@@ -1,0 +1,80 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "<%- awsProviderVersion %>"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "<%- randomProviderVersion %>"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "<%- nullProviderVersion %>"
+    }
+  }
+}
+
+variable "data_access_grants" {
+  description = "IAM roles to grant data-plane access to, and the aoss index permissions each should receive."
+  type = list(object({
+    principal_arn = string
+    permissions   = list(string)
+  }))
+  default = []
+}
+
+data "aws_region" "current" {}
+
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+locals {
+  opensearch_config   = jsondecode(file("${path.module}/../../../../../../../<%= projectRoot %>/config.json"))
+  project_root        = abspath("${path.module}/../../../../../../../<%= projectRoot %>")
+  sync_indices_script = abspath("${path.module}/../../../../../../../packages/common/scripts/src/opensearch/sync-indices.ts")
+}
+
+module "opensearch_collection" {
+  source             = "../../../core/opensearch"
+  name               = "<%= nameKebabCase %>-${random_string.suffix.result}"
+  data_access_grants = var.data_access_grants
+}
+
+module "add_to_runtime_config" {
+  source = "../../../core/runtime-config/entry"
+
+  namespace = "opensearch"
+  key       = local.opensearch_config.runtimeConfigKey
+  value = {
+    collectionEndpoint = module.opensearch_collection.collection_endpoint
+    region             = data.aws_region.current.region
+  }
+}
+
+# Terraform has no equivalent of CDK's `AWS::OpenSearchServerless::Index`
+# resource yet, so indices are synced with the same script used for local dev
+# (see ts#opensearch's `dev` target), run once against the real collection
+# using the deployer's own AWS credentials. Reruns whenever the zod-derived
+# mapping snapshot in config.json changes (kept fresh by the project's
+# `sync-mappings` build target).
+resource "null_resource" "sync_indices" {
+  triggers = {
+    collection_id = module.opensearch_collection.collection_arn
+    indices_hash  = sha256(jsonencode(local.opensearch_config.indices))
+  }
+
+  provisioner "local-exec" {
+    command     = "tsx ${local.sync_indices_script}"
+    working_dir = local.project_root
+    environment = {
+      OPENSEARCH_COLLECTION_ENDPOINT = module.opensearch_collection.collection_endpoint
+      AWS_REGION                     = data.aws_region.current.region
+    }
+  }
+
+  depends_on = [module.opensearch_collection]
+}

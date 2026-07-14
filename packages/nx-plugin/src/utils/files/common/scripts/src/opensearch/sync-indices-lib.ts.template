@@ -1,0 +1,95 @@
+import { readdirSync } from 'fs';
+import { resolve } from 'path';
+import { pathToFileURL } from 'url';
+import type { Client } from '@opensearch-project/opensearch';
+
+// Structurally matches OpenSearchIndexDefinition/zodSchemaToOpenSearchMapping
+// from the calling project's generated src/zod-to-mapping.ts. Declared locally
+// rather than imported: this module is shared across every ts#opensearch
+// project, each with its own zod-to-mapping.ts at a different relative path,
+// so the module it loads at runtime (below) can only be resolved dynamically.
+interface OpenSearchIndexDefinition {
+  indexName: string;
+  schema: { parse: (value: unknown) => unknown };
+}
+type OpenSearchMapping = { mappings: { properties: Record<string, unknown> } };
+type ZodToMappingModule = {
+  zodSchemaToOpenSearchMapping: (schema: unknown) => OpenSearchMapping;
+  isOpenSearchIndexDefinition: (
+    value: unknown,
+  ) => value is OpenSearchIndexDefinition;
+};
+
+export interface ResolvedIndex {
+  indexName: string;
+  mapping: OpenSearchMapping;
+}
+
+// Always invoked with cwd set to the calling project's root, so the project's
+// own zod schemas (the single source of truth for each index's mapping) are
+// resolved relative to process.cwd() rather than this module's own location.
+export const loadIndexDefinitions = async (): Promise<ResolvedIndex[]> => {
+  const { zodSchemaToOpenSearchMapping, isOpenSearchIndexDefinition } =
+    (await import(
+      pathToFileURL(resolve('src/zod-to-mapping.ts')).href
+    )) as ZodToMappingModule;
+
+  const indicesDir = resolve('src/indices');
+  const files = readdirSync(indicesDir).filter(
+    (f) => f.endsWith('.ts') && f !== 'index.ts',
+  );
+  const modules = await Promise.all(
+    files.map((f) => import(pathToFileURL(resolve(indicesDir, f)).href)),
+  );
+  const definitions = modules.flatMap((mod) =>
+    Object.values(mod).filter(isOpenSearchIndexDefinition),
+  );
+
+  return definitions.map(({ indexName, schema }) => ({
+    indexName,
+    mapping: zodSchemaToOpenSearchMapping(schema),
+  }));
+};
+
+export const waitForCluster = async (client: Client): Promise<void> => {
+  for (;;) {
+    try {
+      await client.cluster.health({}, { requestTimeout: 10000 });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+};
+
+export const ensureIndex = async (
+  client: Client,
+  indexName: string,
+  mapping: OpenSearchMapping,
+): Promise<void> => {
+  const { body: exists } = await client.indices.exists(
+    { index: indexName },
+    { requestTimeout: 10000 },
+  );
+  if (!exists) {
+    // Cast: `mapping` is intentionally untyped against opensearch-js's own
+    // `Property` union (a closed set of concrete field-mapping shapes) so this
+    // module stays framework-agnostic - the same mapping also has to satisfy
+    // CDK's independently-typed `CfnIndex.MappingsProperty` (see the app
+    // construct template), and both are structurally satisfied at runtime.
+    await client.indices.create(
+      { index: indexName, body: mapping as any },
+      { requestTimeout: 10000 },
+    );
+    console.log(`Created index: ${indexName}`);
+    return;
+  }
+  // Existing index: OpenSearch only allows adding new fields via putMapping -
+  // changing or removing an existing field's mapping is rejected. A breaking
+  // schema change requires the standard reindex-and-alias-swap approach.
+  await client.indices.putMapping(
+    { index: indexName, body: mapping.mappings as any },
+    { requestTimeout: 10000 },
+  );
+  console.log(`Updated mapping: ${indexName}`);
+};

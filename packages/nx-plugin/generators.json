@@ -429,6 +429,40 @@
       "metric": "g47",
       "hidden": true
     },
+    "ts#opensearch": {
+      "factory": "./src/ts/opensearch/generator",
+      "schema": "./src/ts/opensearch/schema.json",
+      "description": "Create a TypeScript OpenSearch project",
+      "metric": "g60"
+    },
+    "ts#opensearch#trpc-connection": {
+      "factory": "./src/ts/opensearch/trpc-connection/generator",
+      "schema": "./src/ts/opensearch/trpc-connection/schema.json",
+      "description": "Connect a ts#trpc-api project to a ts#opensearch project",
+      "metric": "g61",
+      "hidden": true
+    },
+    "ts#opensearch#smithy-connection": {
+      "factory": "./src/ts/opensearch/smithy-connection/generator",
+      "schema": "./src/ts/opensearch/smithy-connection/schema.json",
+      "description": "Connect a Smithy backend to a ts#opensearch project",
+      "metric": "g62",
+      "hidden": true
+    },
+    "ts#opensearch#agent-connection": {
+      "factory": "./src/ts/opensearch/agent-connection/generator",
+      "schema": "./src/ts/opensearch/agent-connection/schema.json",
+      "description": "Connect a ts#agent to a ts#opensearch project",
+      "metric": "g63",
+      "hidden": true
+    },
+    "ts#opensearch#mcp-server-connection": {
+      "factory": "./src/ts/opensearch/mcp-server-connection/generator",
+      "schema": "./src/ts/opensearch/mcp-server-connection/schema.json",
+      "description": "Connect a ts#mcp-server to a ts#opensearch project",
+      "metric": "g64",
+      "hidden": true
+    },
     "py#dynamodb": {
       "factory": "./src/py/dynamodb/generator",
       "schema": "./src/py/dynamodb/schema.json",
