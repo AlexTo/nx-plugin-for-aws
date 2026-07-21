@@ -1,0 +1,18 @@
+import { readFileSync, writeFileSync } from 'fs';
+import { loadIndexDefinitions } from './sync-indices-lib.js';
+
+// Runs as a build step (see the `sync-mappings` target) so config.json's
+// `indices` is always a fresh snapshot of the zod schemas under src/indices/.
+// The CDK app construct (a different Nx project, so it can't import these zod
+// modules directly at synth time) reads this snapshot to declare a
+// `CfnIndex` per index - the same reason DynamoDB's GSIs are snapshotted into
+// config.json rather than read from the entity source directly.
+const configPath = 'config.json';
+const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+
+config.indices = (await loadIndexDefinitions()).map(({ indexName, mapping }) => ({
+  indexName,
+  mapping: mapping.mappings,
+}));
+
+writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);

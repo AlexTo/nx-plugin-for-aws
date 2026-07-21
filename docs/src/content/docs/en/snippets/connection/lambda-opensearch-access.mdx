@@ -1,0 +1,64 @@
+---
+title: Lambda OpenSearch Access
+---
+import Infrastructure from '@components/infrastructure.astro';
+
+To allow Lambda functions to access the OpenSearch Serverless collection, grant the necessary permissions in your infrastructure.
+
+<Infrastructure>
+<Fragment slot="cdk">
+
+Call `grantReadWriteData` on the collection construct. Unlike DynamoDB or RDS, this grants **two** things AOSS checks on every request: an identity-based IAM policy statement, and an entry in the collection's data access policy naming the grantee's role:
+
+```ts title="packages/infra/src/stacks/application-stack.ts"
+import { MySearch } from ':my-scope/common-constructs';
+
+const collection = new MySearch(this, 'Search');
+
+const api = new Api(this, 'Api', {
+  integrations: Api.defaultIntegrations(this).build(),
+});
+
+Object.entries(api.integrations).forEach(([, integration]) => {
+  collection.grantReadWriteData(integration.handler);
+});
+```
+
+:::note
+`grantReadData`/`grantWriteData`/`grantReadWriteData` take an `IRole`, not the broader `IGrantable` most CDK grant methods accept — a data access policy statement must reference a concrete IAM principal ARN, which isn't available on every `IGrantable` (e.g. a `ServicePrincipal`). A Lambda's execution role satisfies this.
+:::
+</Fragment>
+<Fragment slot="terraform">
+
+Pass the Lambda execution role's ARN and the permissions it needs through the collection module's `data_access_grants` variable. Terraform has no imperative grant API, so this must be declared alongside the collection itself:
+
+```hcl title="packages/infra/src/main.tf"
+module "my_search" {
+  source = "../../common/terraform/src/app/opensearch/my-search"
+
+  data_access_grants = [
+    {
+      principal_arn = module.my_api.lambda_role_arn
+      permissions   = ["aoss:ReadDocument", "aoss:WriteDocument"]
+    }
+  ]
+}
+
+resource "aws_iam_role_policy" "opensearch_access" {
+  role = module.my_api.lambda_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["aoss:APIAccessAll"]
+        Resource = [module.my_search.collection_arn]
+      }
+    ]
+  })
+}
+```
+
+</Fragment>
+</Infrastructure>

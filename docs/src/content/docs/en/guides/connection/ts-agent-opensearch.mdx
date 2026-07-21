@@ -1,0 +1,73 @@
+---
+title: TypeScript Agent to OpenSearch
+description: Connect a TypeScript Agent to a TypeScript OpenSearch project
+when:
+  sourceType: ts#agent
+  targetType: ts#opensearch
+---
+import Link from '@components/link.astro';
+import RunGenerator from '@components/run-generator.astro';
+import GeneratorParameters from '@components/generator-parameters.astro';
+import NxCommands from '@components/nx-commands.astro';
+import Snippet from '@components/snippet.astro';
+
+The `connection` generator wires a <Link path="guides/ts-agent">TypeScript Agent</Link> to a <Link path="guides/ts-opensearch">TypeScript OpenSearch</Link> project, configuring local development so both start together automatically.
+
+## Prerequisites
+
+Before using this generator, ensure you have:
+
+1. A <Link path="guides/ts-agent">`ts#agent`</Link> project
+2. A <Link path="guides/ts-opensearch">`ts#opensearch`</Link> project
+
+## Usage
+
+### Run the Generator
+
+<RunGenerator generator="connection" />
+
+Select your Agent project as the source and your OpenSearch project as the target. If the project contains multiple agent components, specify `sourceComponent` to disambiguate.
+
+### Options
+
+<GeneratorParameters generator="connection" />
+
+## Generator Output
+
+The generator updates the agent's `<agent-name>-dev` target in `project.json` to depend on the OpenSearch project's `dev` target. No source files are modified.
+
+## Using OpenSearch in Agents
+
+Import the client and index schema from the OpenSearch package and use them as a tool inside your agent definition — a natural fit for semantic/RAG search via the `knn_vector` field:
+
+```ts title="packages/my-service/src/my-agent/agent.ts"
+import { getOpenSearchClient, exampleIndexName } from ':my-scope/my-search';
+
+export const getAgent = async () => {
+  // ...
+  return new Agent({
+    tools: [
+      tool({
+        name: 'search_examples',
+        description: 'Search example items by title',
+        func: async ({ query }: { query: string }) => {
+          const client = await getOpenSearchClient();
+          const { body } = await client.search({
+            index: exampleIndexName,
+            body: { query: { match: { title: query } } },
+          });
+          return body.hits.hits.map((hit: any) => hit._source);
+        },
+      }),
+    ],
+  });
+};
+```
+
+## Infrastructure
+
+<Snippet name="connection/lambda-opensearch-access" />
+
+## Local Development
+
+<Snippet name="connection/opensearch-local-development" />

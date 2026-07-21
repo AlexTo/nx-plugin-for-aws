@@ -1,0 +1,162 @@
+terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "<%- awsProviderVersion %>"
+    }
+  }
+}
+
+variable "name" {
+  description = "Name for the OpenSearch Serverless collection."
+  type        = string
+}
+
+variable "type" {
+  description = "Collection type - VECTORSEARCH, SEARCH or TIMESERIES."
+  type        = string
+  default     = "VECTORSEARCH"
+}
+
+variable "enable_key_rotation" {
+  description = "Whether to enable automatic key rotation on the KMS key used to encrypt the collection."
+  type        = bool
+  default     = true
+}
+
+variable "data_access_grants" {
+  description = "IAM roles to grant data-plane access to, and the aoss index permissions each should receive. Terraform has no imperative grant API (unlike the CDK construct's grantReadData/grantWriteData/grantReadWriteData methods), so grants are declared here directly."
+  type = list(object({
+    principal_arn = string
+    permissions   = list(string)
+  }))
+  default = []
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+
+resource "aws_kms_key" "collection" {
+  description         = "KMS key for OpenSearch Serverless collection ${var.name}"
+  enable_key_rotation = var.enable_key_rotation
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EnableRootAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowOpenSearchServerlessService"
+        Effect = "Allow"
+        Principal = {
+          Service = "aoss.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+          "kms:CreateGrant"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_opensearchserverless_security_policy" "encryption" {
+  name = "${var.name}-encryption"
+  type = "encryption"
+  policy = jsonencode({
+    Rules = [
+      { ResourceType = "collection", Resource = ["collection/${var.name}"] }
+    ]
+    AWSOwnedKey = false
+    KmsARN      = aws_kms_key.collection.arn
+  })
+}
+
+resource "aws_opensearchserverless_security_policy" "network" {
+  name = "${var.name}-network"
+  type = "network"
+  policy = jsonencode([
+    {
+      Rules = [
+        { ResourceType = "collection", Resource = ["collection/${var.name}"] },
+        { ResourceType = "dashboard", Resource = ["collection/${var.name}"] }
+      ]
+      AllowFromPublic = true
+    }
+  ])
+}
+
+data "aws_caller_identity" "deployer" {}
+
+locals {
+  # The identity running `terraform apply` needs its own data access grant -
+  # creating/updating indices at deploy time (see the null_resource in the app
+  # module) is itself a data-plane operation gated by this policy, not just the
+  # deployer's IAM permissions.
+  all_data_access_grants = concat(var.data_access_grants, [{
+    principal_arn = data.aws_caller_identity.deployer.arn
+    permissions   = ["aoss:CreateIndex", "aoss:UpdateIndex", "aoss:DeleteIndex", "aoss:ReadDocument", "aoss:WriteDocument"]
+  }])
+}
+
+resource "aws_opensearchserverless_access_policy" "data" {
+  name = "${var.name}-access"
+  type = "data"
+  policy = jsonencode([
+    for grant in local.all_data_access_grants : {
+      Rules = [
+        {
+          ResourceType = "index"
+          Resource     = ["index/${var.name}/*"]
+          Permission   = grant.permissions
+        }
+      ]
+      Principal = [grant.principal_arn]
+    }
+  ])
+}
+
+resource "aws_opensearchserverless_collection" "collection" {
+  name = var.name
+  type = var.type
+
+  depends_on = [
+    aws_opensearchserverless_security_policy.encryption,
+    aws_opensearchserverless_security_policy.network,
+    aws_opensearchserverless_access_policy.data,
+  ]
+}
+
+output "collection_name" {
+  description = "Name of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.name
+}
+
+output "collection_arn" {
+  description = "ARN of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.arn
+}
+
+output "collection_endpoint" {
+  description = "Data-plane endpoint of the OpenSearch Serverless collection."
+  value       = aws_opensearchserverless_collection.collection.collection_endpoint
+}
+
+output "kms_key_arn" {
+  description = "ARN of the KMS key used to encrypt the collection."
+  value       = aws_kms_key.collection.arn
+}

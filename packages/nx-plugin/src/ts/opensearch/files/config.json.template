@@ -1,0 +1,10 @@
+{
+  "runtimeConfigKey": "<%= runtimeConfigKey %>",
+  "localDev": {
+    "port": <%= localOpenSearchPort %>,
+    "image": "<%= dockerImage %>",
+    "containerName": "<%= containerName %>",
+    "containerEngine": "<%= containerEngine %>"
+  },
+  "indices": []
+}

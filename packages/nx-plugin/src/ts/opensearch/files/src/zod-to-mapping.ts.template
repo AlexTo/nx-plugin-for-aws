@@ -1,0 +1,115 @@
+import { z } from 'zod';
+
+// OpenSearch-specific mapping overrides for a field, set via `.meta({ opensearch: {...} })`.
+// Needed wherever zod's type system doesn't distinguish an OpenSearch field type
+// (eg. `keyword` vs `text`) or has no equivalent at all (eg. `knn_vector`, `geo_point`).
+export interface OpenSearchFieldOverride {
+  type?: string;
+  dimension?: number;
+  method?: {
+    name?: string;
+    spaceType?: string;
+    engine?: string;
+    parameters?: Record<string, unknown>;
+  };
+  [key: string]: unknown;
+}
+
+interface JsonSchemaNode {
+  type?: string | string[];
+  format?: string;
+  properties?: Record<string, JsonSchemaNode>;
+  items?: JsonSchemaNode;
+  opensearch?: OpenSearchFieldOverride;
+}
+
+const inferType = (node: JsonSchemaNode): string => {
+  const type = Array.isArray(node.type) ? node.type[0] : node.type;
+  switch (type) {
+    case 'string':
+      return node.format === 'date-time' ? 'date' : 'text';
+    case 'number':
+      return 'float';
+    case 'integer':
+      return 'long';
+    case 'boolean':
+      return 'boolean';
+    case 'object':
+      return 'object';
+    default:
+      return 'text';
+  }
+};
+
+const nodeToProperty = (node: JsonSchemaNode): Record<string, unknown> => {
+  if (node.opensearch) {
+    const { type, ...rest } = node.opensearch;
+    return { type: type ?? inferType(node), ...rest };
+  }
+
+  const type = Array.isArray(node.type) ? node.type[0] : node.type;
+
+  if (type === 'object' && node.properties) {
+    return {
+      type: 'object',
+      properties: Object.fromEntries(
+        Object.entries(node.properties).map(([key, value]) => [
+          key,
+          nodeToProperty(value),
+        ]),
+      ),
+    };
+  }
+
+  if (type === 'array' && node.items) {
+    // OpenSearch has no distinct array mapping type - an array of primitives
+    // maps the same way as a single value of that type would.
+    return nodeToProperty(node.items);
+  }
+
+  return { type: inferType(node) };
+};
+
+/**
+ * Derives an OpenSearch index mapping from a zod object schema. Field types are
+ * inferred from the zod shape; use `.meta({ opensearch: {...} })` on a field to
+ * override the inferred type or add mapping parameters (eg. `knn_vector`
+ * dimension/method for vector search fields).
+ */
+export const zodSchemaToOpenSearchMapping = (
+  schema: z.ZodObject<any>,
+): { mappings: { properties: Record<string, unknown> } } => {
+  const jsonSchema = z.toJSONSchema(schema, {
+    io: 'output',
+  }) as JsonSchemaNode;
+  const properties = jsonSchema.properties ?? {};
+  return {
+    mappings: {
+      properties: Object.fromEntries(
+        Object.entries(properties).map(([key, value]) => [
+          key,
+          nodeToProperty(value),
+        ]),
+      ),
+    },
+  };
+};
+
+// Pairs an index name with the zod schema that defines its documents. Export
+// one of these per index module (see indices/example.ts) so local-dev and
+// deploy-time tooling can discover every index in the project without relying
+// on file/export naming conventions.
+export interface OpenSearchIndexDefinition<
+  T extends z.ZodObject<any> = z.ZodObject<any>,
+> {
+  indexName: string;
+  schema: T;
+}
+
+export const isOpenSearchIndexDefinition = (
+  value: unknown,
+): value is OpenSearchIndexDefinition =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as OpenSearchIndexDefinition).indexName === 'string' &&
+  typeof (value as OpenSearchIndexDefinition).schema?.parse === 'function';

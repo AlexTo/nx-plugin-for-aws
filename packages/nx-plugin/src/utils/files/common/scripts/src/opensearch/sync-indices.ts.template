@@ -1,0 +1,32 @@
+import { Client } from '@opensearch-project/opensearch';
+import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import { ensureIndex, loadIndexDefinitions, waitForCluster } from './sync-indices-lib.js';
+
+// Invoked by the Terraform module (via a null_resource local-exec) after the
+// collection is created, using the deployer's own AWS credentials - Terraform
+// has no native resource for OpenSearch Serverless indices, unlike CDK's
+// `AWS::OpenSearchServerless::Index`, so this runs the same sync logic used
+// for local dev against the real collection instead.
+const collectionEndpoint = process.env.OPENSEARCH_COLLECTION_ENDPOINT;
+const region = process.env.AWS_REGION;
+if (!collectionEndpoint || !region) {
+  throw new Error(
+    'OPENSEARCH_COLLECTION_ENDPOINT and AWS_REGION environment variables are required',
+  );
+}
+
+const client = new Client({
+  ...AwsSigv4Signer({
+    region,
+    service: 'aoss',
+    getCredentials: () => defaultProvider()(),
+  }),
+  node: collectionEndpoint,
+});
+
+await waitForCluster(client);
+
+for (const { indexName, mapping } of await loadIndexDefinitions()) {
+  await ensureIndex(client, indexName, mapping);
+}

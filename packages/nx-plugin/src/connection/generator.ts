@@ -38,6 +38,11 @@ import { TS_DYNAMODB_GENERATOR_INFO } from '../ts/dynamodb/generator';
 import tsDynamoDBMcpServerConnectionGenerator from '../ts/dynamodb/mcp-server-connection/generator';
 import tsDynamoDBSmithyConnectionGenerator from '../ts/dynamodb/smithy-connection/generator';
 import tsDynamoDBTrpcConnectionGenerator from '../ts/dynamodb/trpc-connection/generator';
+import tsOpenSearchAgentConnectionGenerator from '../ts/opensearch/agent-connection/generator';
+import { TS_OPENSEARCH_GENERATOR_INFO } from '../ts/opensearch/generator';
+import tsOpenSearchMcpServerConnectionGenerator from '../ts/opensearch/mcp-server-connection/generator';
+import tsOpenSearchSmithyConnectionGenerator from '../ts/opensearch/smithy-connection/generator';
+import tsOpenSearchTrpcConnectionGenerator from '../ts/opensearch/trpc-connection/generator';
 import tsRdbAgentConnectionGenerator from '../ts/rdb/agent-connection/generator';
 import { TS_RDB_GENERATOR_INFO } from '../ts/rdb/generator';
 import tsRdbMcpServerConnectionGenerator from '../ts/rdb/mcp-server-connection/generator';
@@ -108,6 +113,14 @@ const CONNECTION_GENERATORS = {
     tsDynamoDBSmithyConnectionGenerator(tree, options),
   'ts#mcp-server -> ts#dynamodb': (tree, options) =>
     tsDynamoDBMcpServerConnectionGenerator(tree, options),
+  'ts#trpc-api -> ts#opensearch': (tree, options) =>
+    tsOpenSearchTrpcConnectionGenerator(tree, options),
+  'ts#agent -> ts#opensearch': (tree, options) =>
+    tsOpenSearchAgentConnectionGenerator(tree, options),
+  'ts#smithy-api -> ts#opensearch': (tree, options) =>
+    tsOpenSearchSmithyConnectionGenerator(tree, options),
+  'ts#mcp-server -> ts#opensearch': (tree, options) =>
+    tsOpenSearchMcpServerConnectionGenerator(tree, options),
   'ts#react-website -> ts#trpc-api': (tree, options) =>
     trpcReactGenerator(tree, {
       frontendProjectName: options.sourceProject,
@@ -445,6 +458,10 @@ const determineProjectTypeFromConfig = async (
     return 'py#dynamodb';
   }
 
+  if (isTsOpenSearch(projectConfiguration)) {
+    return 'ts#opensearch';
+  }
+
   if (isPyRdb(projectConfiguration)) {
     return 'py#rdb';
   }
@@ -564,6 +581,10 @@ const isTsDynamoDB = (projectConfiguration: ProjectConfiguration): boolean =>
 const isPyDynamoDB = (projectConfiguration: ProjectConfiguration): boolean =>
   ((projectConfiguration.metadata as any) ?? {}).generator ===
   PY_DYNAMODB_GENERATOR_INFO.id;
+
+const isTsOpenSearch = (projectConfiguration: ProjectConfiguration): boolean =>
+  ((projectConfiguration.metadata as any) ?? {}).generator ===
+  TS_OPENSEARCH_GENERATOR_INFO.id;
 
 const isPyRdb = (projectConfiguration: ProjectConfiguration): boolean =>
   ((projectConfiguration.metadata as any) ?? {}).generator ===

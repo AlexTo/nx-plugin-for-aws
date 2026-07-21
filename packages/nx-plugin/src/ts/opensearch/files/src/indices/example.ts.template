@@ -1,0 +1,32 @@
+import { z } from 'zod';
+import type { OpenSearchIndexDefinition } from '../zod-to-mapping<% if (esm) { %>.js<% } %>';
+
+export const exampleIndexName = 'example';
+
+// Example index schema - replace with your own. zod is the single source of
+// truth: this schema both validates documents and derives the OpenSearch index
+// mapping (see ../zod-to-mapping.js). Use `.meta({ opensearch: {...} })` where
+// zod's type system doesn't distinguish an OpenSearch field type (eg. `keyword`
+// vs `text`) or has no equivalent at all (eg. `knn_vector` for vector search).
+export const ExampleDocument = z.object({
+  id: z.string(),
+  title: z.string(),
+  category: z.string().meta({ opensearch: { type: 'keyword' } }),
+  createdAt: z.iso.datetime(),
+  // A vector field for semantic/RAG search. Adjust `dimension` to match your
+  // embedding model's output size.
+  embedding: z
+    .array(z.number())
+    .meta({ opensearch: { type: 'knn_vector', dimension: 1536 } }),
+});
+
+export type ExampleDocument = z.infer<typeof ExampleDocument>;
+
+// Discovered by local-dev and deploy-time index sync tooling - export one of
+// these per index module.
+export const exampleIndexDefinition: OpenSearchIndexDefinition<
+  typeof ExampleDocument
+> = {
+  indexName: exampleIndexName,
+  schema: ExampleDocument,
+};

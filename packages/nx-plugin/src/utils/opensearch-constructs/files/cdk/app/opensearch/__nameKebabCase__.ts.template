@@ -1,0 +1,55 @@
+import { Construct } from 'constructs';
+import { CfnIndex } from 'aws-cdk-lib/aws-opensearchserverless';
+import {
+  OpenSearchCollection,
+  OpenSearchCollectionProps,
+} from '../../core/opensearch<% if (esm) { %>.js<% } %>';
+import { findWorkspaceRoot } from '../../core/workspace<% if (esm) { %>.js<% } %>';
+import { readFileSync } from 'fs';
+import { join } from "path";
+import { fileURLToPath } from "url";
+
+const { runtimeConfigKey, indices } = JSON.parse(
+  readFileSync(
+    join(
+      findWorkspaceRoot(fileURLToPath(new URL(<% if (esm) { %>import.meta.url<% } else { %>require('url').pathToFileURL(__filename).href<% } %>))),
+      '<%= projectRoot %>/config.json',
+    ),
+    'utf-8',
+  ),
+) as {
+  runtimeConfigKey: string;
+  indices: { indexName: string; mapping: { properties: Record<string, unknown> } }[];
+};
+
+export type <%= nameClassName %>Props = Omit<
+  OpenSearchCollectionProps,
+  'runtimeConfigKey' | 'collectionName'
+> & {
+  collectionName?: string;
+};
+
+export class <%= nameClassName %> extends OpenSearchCollection {
+  constructor(scope: Construct, id: string, props?: <%= nameClassName %>Props) {
+    super(scope, id, {
+      collectionName: '<%= nameKebabCase %>',
+      ...props,
+      runtimeConfigKey,
+    });
+
+    for (const { indexName, mapping } of indices) {
+      const index = new CfnIndex(this, `Index${indexName}`, {
+        collectionEndpoint: this.collection.attrCollectionEndpoint,
+        indexName,
+        // Cast: `mapping` (from config.json, derived from zod at build time) is
+        // intentionally untyped against CfnIndex's own PropertyMappingProperty
+        // union so the mapping format stays shared with the opensearch-js
+        // client calls in sync-indices-lib.ts - both are structurally satisfied
+        // at runtime.
+        mappings: mapping as CfnIndex.MappingsProperty,
+      });
+      index.node.addDependency(this.collection);
+      index.node.addDependency(this.accessPolicy);
+    }
+  }
+}
