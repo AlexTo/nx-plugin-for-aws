@@ -223,6 +223,10 @@ const FRAMEWORKS: Record<AgentFramework, FrameworkTemplates> = {
           fromModule: '.core.model_errors_strands',
           importName: 'log_model_errors',
         },
+        {
+          fromModule: '.core.tool_errors_strands',
+          importName: 'log_tool_errors',
+        },
       ],
       protocols: {
         mcp: 'py-core-strands/mcp',

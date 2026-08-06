@@ -343,15 +343,15 @@
       "vi": "Có nên cài đặt các dependencies sau khi generator chạy hay không. Đặt thành false để trì hoãn việc cài đặt khi chạy nhiều generator liên tiếp (việc cài đặt vẫn sẽ chạy nếu cần thiết để các generator tiếp theo có thể tính toán Nx project graph); cài đặt một lần vào cuối."
     },
     "session": {
-      "en": "The storage used to persist session for your Agent. Only 'in-memory' is currently supported for Python agents.",
-      "fr": "Le stockage utilisé pour persister la session de votre Agent. Seul 'in-memory' est actuellement pris en charge pour les agents Python.",
-      "pt": "O armazenamento usado para persistir a sessão do seu Agent. Apenas 'in-memory' é atualmente suportado para agents Python.",
-      "ko": "Agent의 세션을 유지하는 데 사용되는 스토리지입니다. 현재 Python agent에서는 'in-memory'만 지원됩니다.",
-      "es": "El almacenamiento utilizado para persistir la sesión de tu Agent. Solo 'in-memory' está actualmente soportado para agents de Python.",
-      "jp": "Agentのセッションを永続化するために使用されるストレージ。現在、PythonエージェントではOnly 'in-memory'のみがサポートされています。",
-      "it": "L'archiviazione utilizzata per persistere la sessione del tuo Agent. Attualmente solo 'in-memory' è supportato per gli agent Python.",
-      "zh": "用于持久化 Agent 会话的存储。Python agent 目前仅支持 'in-memory'。",
-      "vi": "Bộ nhớ được sử dụng để lưu trữ phiên làm việc cho Agent của bạn. Hiện tại chỉ hỗ trợ 'in-memory' cho các agent Python."
+      "en": "The storage used to persist session for your Agent. 's3' is only valid for the Strands framework; 'dynamodb' (with S3 offloading for large checkpoints) is only valid for the LangChain framework. 'in-memory' is valid for both.",
+      "fr": "Le stockage utilisé pour persister la session de votre Agent. 's3' n'est valide que pour le framework Strands ; 'dynamodb' (avec délestage S3 pour les checkpoints volumineux) n'est valide que pour le framework LangChain. 'in-memory' est valide pour les deux.",
+      "pt": "O armazenamento usado para persistir a sessão do seu Agent. 's3' é válido apenas para o framework Strands; 'dynamodb' (com offloading para S3 para checkpoints grandes) é válido apenas para o framework LangChain. 'in-memory' é válido para ambos.",
+      "ko": "Agent의 세션을 유지하는 데 사용되는 스토리지입니다. 's3'는 Strands 프레임워크에서만 유효합니다. 'dynamodb'(대용량 체크포인트에 대한 S3 오프로딩 포함)는 LangChain 프레임워크에서만 유효합니다. 'in-memory'는 둘 다에서 유효합니다.",
+      "es": "El almacenamiento utilizado para persistir la sesión de tu Agent. 's3' solo es válido para el framework Strands; 'dynamodb' (con descarga a S3 para checkpoints grandes) solo es válido para el framework LangChain. 'in-memory' es válido para ambos.",
+      "jp": "Agentのセッションを永続化するために使用されるストレージ。's3'はStrandsフレームワークでのみ有効です。'dynamodb'(大きなチェックポイントのS3オフロード付き)はLangChainフレームワークでのみ有効です。'in-memory'は両方で有効です。",
+      "it": "L'archiviazione utilizzata per persistere la sessione del tuo Agent. 's3' è valido solo per il framework Strands; 'dynamodb' (con offload su S3 per i checkpoint di grandi dimensioni) è valido solo per il framework LangChain. 'in-memory' è valido per entrambi.",
+      "zh": "用于持久化 Agent 会话的存储。's3' 仅适用于 Strands 框架;'dynamodb'(大型检查点使用 S3 卸载)仅适用于 LangChain 框架。'in-memory' 两者均适用。",
+      "vi": "Bộ nhớ được sử dụng để lưu trữ phiên làm việc cho Agent của bạn. 's3' chỉ hợp lệ cho framework Strands; 'dynamodb' (có chuyển tải sang S3 cho các checkpoint lớn) chỉ hợp lệ cho framework LangChain. 'in-memory' hợp lệ cho cả hai."
     }
   },
   "py#agent#a2a-connection": {

@@ -63,10 +63,10 @@
     },
     "session": {
       "type": "string",
-      "description": "The storage used to persist session for your Agent. Only 'in-memory' is currently supported for Python agents.",
+      "description": "The storage used to persist session for your Agent. 's3' is only valid for the Strands framework; 'dynamodb' (with S3 offloading for large checkpoints) is only valid for the LangChain framework. 'in-memory' is valid for both.",
       "x-prompt": "How would you like to persist session for your Agent?",
-      "enum": ["in-memory"],
-      "default": "in-memory",
+      "enum": ["s3", "dynamodb", "in-memory"],
+      "default": "s3",
       "x-priority": "important"
     },
     "preferInstallDependencies": {

@@ -1,0 +1,144 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`py#agent generator > should generate checkpointer.py returning InMemorySaver for the langchain framework > checkpointer.py (in-memory) 1`] = `
+"import os
+import sqlite3
+
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+
+def get_checkpointer() -> BaseCheckpointSaver:
+    """Returns a LangGraph checkpointer for persisting conversation state across
+    invocations. Local development always uses a local SQLite database for
+    convenience, regardless of the configured session option. Swap this for a
+    durable BaseCheckpointSaver implementation if you need state to survive
+    process restarts or scale-in when deployed.
+    """
+    if os.environ.get("LOCAL_DEV") == "true":
+        os.makedirs("../../tmp/agents/langchain/test-project-agent", exist_ok=True)
+        conn = sqlite3.connect(
+            os.path.join(
+                "../../tmp/agents/langchain/test-project-agent", "checkpoints.sqlite"
+            ),
+            check_same_thread=False,
+        )
+        return SqliteSaver(conn)
+    return InMemorySaver()
+"
+`;
+
+exports[`py#agent generator > should generate checkpointer.py using DynamoDBSaver when session is dynamodb > checkpointer.py (dynamodb) 1`] = `
+"import os
+import sqlite3
+
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph_checkpoint_aws import DynamoDBSaver
+from proj_agent_connection.core.runtime_config import get_agentcore_runtime_config
+
+
+def get_checkpointer() -> BaseCheckpointSaver:
+    """Returns a LangGraph checkpointer for persisting conversation state across
+    invocations. Local development always uses a local SQLite database for
+    convenience, regardless of the configured session option. Swap this for a
+    durable BaseCheckpointSaver implementation if you need state to survive
+    process restarts or scale-in when deployed.
+    """
+    if os.environ.get("LOCAL_DEV") == "true":
+        os.makedirs("../../tmp/agents/langchain/test-project-agent", exist_ok=True)
+        conn = sqlite3.connect(
+            os.path.join(
+                "../../tmp/agents/langchain/test-project-agent", "checkpoints.sqlite"
+            ),
+            check_same_thread=False,
+        )
+        return SqliteSaver(conn)
+    config = get_agentcore_runtime_config()
+    session_config = (
+        (config.get("agentRuntimes") or {})
+        .get("TestProjectAgent", {})
+        .get("session", {})
+    )
+    table_name = session_config.get("tableName")
+    bucket_name = session_config.get("bucketName")
+    if not table_name or not bucket_name:
+        raise RuntimeError(
+            "No DynamoDB checkpoint table or S3 offload bucket configured for this agent in runtime configuration."
+        )
+    return DynamoDBSaver(
+        table_name=table_name,
+        region_name=os.environ.get("AWS_REGION"),
+        s3_offload_config={"bucket_name": bucket_name},
+    )
+"
+`;
+
+exports[`py#agent generator > should generate session.py returning None when session is in-memory > session.py (in-memory) 1`] = `
+"import os
+
+from proj_agent_connection import get_current_session_id
+from strands.session import FileSessionManager, SessionManager
+
+
+def get_session_manager() -> SessionManager | None:
+    """Returns a SessionManager for persisting conversation state across
+    invocations. Local development always uses local file storage for
+    convenience, regardless of the configured session option. Without a
+    configured session option, conversation state is kept in memory only and
+    does not survive process restarts.
+    """
+    session_id = get_current_session_id()
+    if not session_id:
+        raise RuntimeError(
+            "No current session id — cannot resolve a SessionManager outside of a request scope."
+        )
+    if os.environ.get("LOCAL_DEV") == "true":
+        return FileSessionManager(
+            session_id=session_id,
+            storage_dir="../../tmp/agents/strands/test-project-agent",
+        )
+    return None
+"
+`;
+
+exports[`py#agent generator > should generate session.py using S3 storage by default for the strands framework > session.py (s3) 1`] = `
+"import os
+
+from proj_agent_connection import get_current_session_id
+from proj_agent_connection.core.runtime_config import get_agentcore_runtime_config
+from strands.session import FileSessionManager, S3SessionManager, SessionManager
+
+
+def get_session_manager() -> SessionManager | None:
+    """Returns a SessionManager for persisting conversation state across
+    invocations. Local development always uses local file storage for
+    convenience, regardless of the configured session option. Without a
+    configured session option, conversation state is kept in memory only and
+    does not survive process restarts.
+    """
+    session_id = get_current_session_id()
+    if not session_id:
+        raise RuntimeError(
+            "No current session id — cannot resolve a SessionManager outside of a request scope."
+        )
+    if os.environ.get("LOCAL_DEV") == "true":
+        return FileSessionManager(
+            session_id=session_id,
+            storage_dir="../../tmp/agents/strands/test-project-agent",
+        )
+    config = get_agentcore_runtime_config()
+    bucket_name = (
+        (config.get("agentRuntimes") or {})
+        .get("TestProjectAgent", {})
+        .get("session", {})
+        .get("bucketName")
+    )
+    if not bucket_name:
+        raise RuntimeError(
+            "No S3 bucket configured for this agent's session in runtime configuration."
+        )
+    return S3SessionManager(session_id=session_id, bucket=bucket_name)
+"
+`;

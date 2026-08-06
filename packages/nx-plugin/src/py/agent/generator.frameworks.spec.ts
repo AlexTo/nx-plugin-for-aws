@@ -393,9 +393,15 @@ dev-dependencies = []
       );
       expect(agentContent).toContain('create_agent');
       expect(agentContent).toContain('ChatBedrockConverse');
-      expect(agentContent).toContain('InMemorySaver');
+      expect(agentContent).toContain('get_checkpointer');
       expect(agentContent).toContain('checkpointer');
       expect(agentContent).not.toContain('from strands');
+
+      const checkpointerContent = tree.read(
+        'apps/test-project/proj_test_project/agent/checkpointer.py',
+        'utf-8',
+      );
+      expect(checkpointerContent).toContain('InMemorySaver');
 
       // ChatBedrockConverse's init alias is `model`, not `model_id` — `model_id=`
       // passes at runtime but fails `ty` (which blocks build/synth/deploy).
@@ -569,6 +575,10 @@ dev-dependencies = []
         'apps/test-project/proj_test_project/snapshot_agent/agent.py',
         'utf-8',
       );
+      const checkpointerContent = tree.read(
+        'apps/test-project/proj_test_project/snapshot_agent/checkpointer.py',
+        'utf-8',
+      );
       const mainContent = tree.read(
         'apps/test-project/proj_test_project/snapshot_agent/main.py',
         'utf-8',
@@ -576,6 +586,7 @@ dev-dependencies = []
 
       expect(initContent).toMatchSnapshot('langchain-__init__.py');
       expect(agentContent).toMatchSnapshot('langchain-agent.py');
+      expect(checkpointerContent).toMatchSnapshot('langchain-checkpointer.py');
       expect(mainContent).toMatchSnapshot('langchain-main.py');
 
       const pyprojectToml = tree.read(
