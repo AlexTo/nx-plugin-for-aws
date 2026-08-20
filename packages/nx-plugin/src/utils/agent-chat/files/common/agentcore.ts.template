@@ -6,7 +6,7 @@ import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { AwsClient } from 'aws4fetch';
 <%_ } _%>
 
-const SESSION_HEADER = 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id';
+export const SESSION_HEADER = 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id';
 
 // AgentCore session ids must be at least 33 characters.
 export const SESSION_ID = randomUUID().replaceAll('-', '').padEnd(33, '0');
@@ -59,7 +59,9 @@ export const createAgentCoreFetch = (region: string): typeof fetch => {
   const credentialProvider = fromNodeProviderChain();
   return async (input, init) => {
     const headers = new Headers(init?.headers);
-    headers.set(SESSION_HEADER, SESSION_ID);
+    if (!headers.has(SESSION_HEADER)) {
+      headers.set(SESSION_HEADER, SESSION_ID);
+    }
     const client = new AwsClient({
       ...(await credentialProvider()),
       service: 'bedrock-agentcore',
@@ -73,7 +75,9 @@ export const createAgentCoreFetch = (): typeof fetch => {
   const accessToken = getAccessToken();
   return (input, init) => {
     const headers = new Headers(init?.headers);
-    headers.set(SESSION_HEADER, SESSION_ID);
+    if (!headers.has(SESSION_HEADER)) {
+      headers.set(SESSION_HEADER, SESSION_ID);
+    }
     headers.set('Authorization', `Bearer ${accessToken}`);
     return fetch(input, { ...init, headers });
   };

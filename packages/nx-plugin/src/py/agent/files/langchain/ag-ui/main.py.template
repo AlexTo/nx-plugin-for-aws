@@ -58,6 +58,13 @@ async def invocations(request: Request):
         return StreamingResponse(_bad(), media_type=encoder.get_content_type())
 
     session_id = request.headers.get(SESSION_ID_HEADER) or get_current_session_id()
+    if session_id != input_data.thread_id.ljust(33, "0"):
+        message = f"Session ID {session_id!r} does not match thread ID {input_data.thread_id!r}"
+
+        async def _mismatch():
+            yield encoder.encode(RunErrorEvent(type=EventType.RUN_ERROR, message=message, code="SESSION_ID_MISMATCH"))
+
+        return StreamingResponse(_mismatch(), media_type=encoder.get_content_type())
 
     async def event_generator():
         # Re-bind the session: the streaming body runs outside the middleware.

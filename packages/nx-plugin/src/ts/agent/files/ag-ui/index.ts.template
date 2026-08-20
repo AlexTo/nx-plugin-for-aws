@@ -4,6 +4,8 @@ import {
   addPing,
   addCapabilities,
 } from '@ag-ui/aws-strands/server';
+import { EventType, type RunErrorEvent } from '@ag-ui/core';
+import { EventEncoder } from '@ag-ui/encoder';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import { randomUUID } from 'node:crypto';
@@ -21,9 +23,28 @@ const HOST = '0.0.0.0';
 const SESSION_ID_HEADER = 'x-amzn-bedrock-agentcore-runtime-session-id';
 
 // Bind the inbound session (or a fresh UUID) for downstream MCP / A2A calls.
-const sessionIdMiddleware = (req: Request, _res: Response, next: NextFunction) => {
+const sessionIdMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const header = req.headers[SESSION_ID_HEADER];
   const sessionId = (Array.isArray(header) ? header[0] : header) ?? randomUUID();
+
+  const threadId = req.body?.threadId;
+  if (typeof threadId === 'string' && sessionId !== threadId.padEnd(33, '0')) {
+    const encoder = new EventEncoder({ accept: req.headers.accept });
+    const event: RunErrorEvent = {
+      type: EventType.RUN_ERROR,
+      message: `Session ID ${sessionId} does not match thread ID ${threadId}`,
+      code: 'SESSION_ID_MISMATCH',
+    };
+    res.setHeader('Content-Type', encoder.getContentType());
+    res.write(
+      encoder.getContentType() === 'text/event-stream'
+        ? encoder.encode(event)
+        : Buffer.from(encoder.encodeBinary(event)),
+    );
+    res.end();
+    return;
+  }
+
   runWithSessionId(sessionId, () => next());
 };
 

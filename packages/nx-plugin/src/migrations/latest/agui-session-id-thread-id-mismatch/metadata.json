@@ -1,0 +1,3 @@
+{
+  "description": "Reject AG-UI /invocations requests whose session ID header doesn't match the request's thread ID"
+}

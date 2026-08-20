@@ -1404,12 +1404,16 @@ def list_examples_by_category(category: str) -> list[ExampleItem]:
     const gatewayUrl = `http://127.0.0.1:${ports.agentGateway}`;
 
     // AG-UI targets (ts + py): SSE stream from POST /<target>/invocations.
+    const threadId = 'test-thread'.padEnd(33, '0');
     for (const target of ['my-agui-agent', 'my-py-agui-agent']) {
       const res = await fetch(`${gatewayUrl}/${target}/invocations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          [AGENT_CORE_SESSION_ID_HEADER]: threadId,
+        },
         body: JSON.stringify({
-          threadId: 'test-thread',
+          threadId,
           runId: 'test-run',
           messages: [
             { id: 'msg-1', role: 'user', content: 'What is 3 times 5?' },
@@ -1566,11 +1570,15 @@ def list_examples_by_category(category: str) -> list[ExampleItem]:
       ports.tsAgui,
     );
 
+    const threadId = 'test-thread'.padEnd(33, '0');
     const res = await fetch(`http://127.0.0.1:${ports.tsAgui}/invocations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        [AGENT_CORE_SESSION_ID_HEADER]: threadId,
+      },
       body: JSON.stringify({
-        threadId: 'test-thread',
+        threadId,
         runId: 'test-run',
         messages: [
           { id: 'msg-1', role: 'user', content: 'What is 3 times 5?' },
@@ -1588,6 +1596,33 @@ def list_examples_by_category(category: str) -> list[ExampleItem]:
     );
     expect(res.status).toBe(200);
     expect(body).toContain('data:');
+
+    // A session ID that doesn't derive from the thread ID must be rejected —
+    // it means the request was routed to the wrong AgentCore session.
+    const mismatchRes = await fetch(
+      `http://127.0.0.1:${ports.tsAgui}/invocations`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          [AGENT_CORE_SESSION_ID_HEADER]: 'some-other-session'.padEnd(33, '0'),
+        },
+        body: JSON.stringify({
+          threadId,
+          runId: 'test-run-mismatch',
+          messages: [
+            { id: 'msg-1', role: 'user', content: 'What is 3 times 5?' },
+          ],
+          state: {},
+          tools: [],
+          context: [],
+          forwardedProps: {},
+        }),
+      },
+    );
+    const mismatchBody = await mismatchRes.text();
+    expect(mismatchRes.status).toBe(200);
+    expect(mismatchBody).toContain('SESSION_ID_MISMATCH');
 
     await chatStreamsReply(
       projectRoot,
@@ -1778,11 +1813,15 @@ def list_examples_by_category(category: str) -> list[ExampleItem]:
       ports.pyAgui,
     );
 
+    const threadId = 'test-thread'.padEnd(33, '0');
     const res = await fetch(`http://127.0.0.1:${ports.pyAgui}/invocations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        [AGENT_CORE_SESSION_ID_HEADER]: threadId,
+      },
       body: JSON.stringify({
-        threadId: 'test-thread',
+        threadId,
         runId: 'test-run',
         messages: [
           { id: 'msg-1', role: 'user', content: 'What is 3 times 5?' },
@@ -1800,6 +1839,33 @@ def list_examples_by_category(category: str) -> list[ExampleItem]:
     );
     expect(res.status).toBe(200);
     expect(body).toContain('data:');
+
+    // A session ID that doesn't derive from the thread ID must be rejected —
+    // it means the request was routed to the wrong AgentCore session.
+    const mismatchRes = await fetch(
+      `http://127.0.0.1:${ports.pyAgui}/invocations`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          [AGENT_CORE_SESSION_ID_HEADER]: 'some-other-session'.padEnd(33, '0'),
+        },
+        body: JSON.stringify({
+          threadId,
+          runId: 'test-run-mismatch',
+          messages: [
+            { id: 'msg-1', role: 'user', content: 'What is 3 times 5?' },
+          ],
+          state: {},
+          tools: [],
+          context: [],
+          forwardedProps: {},
+        }),
+      },
+    );
+    const mismatchBody = await mismatchRes.text();
+    expect(mismatchRes.status).toBe(200);
+    expect(mismatchBody).toContain('SESSION_ID_MISMATCH');
 
     await chatStreamsReply(
       projectRoot,
@@ -1822,13 +1888,17 @@ def list_examples_by_category(category: str) -> list[ExampleItem]:
       ports.pyLangchainAgui,
     );
 
+    const threadId = 'test-thread'.padEnd(33, '0');
     const res = await fetch(
       `http://127.0.0.1:${ports.pyLangchainAgui}/invocations`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          [AGENT_CORE_SESSION_ID_HEADER]: threadId,
+        },
         body: JSON.stringify({
-          threadId: 'test-thread',
+          threadId,
           runId: 'test-run',
           messages: [
             { id: 'msg-1', role: 'user', content: 'What is 3 times 5?' },
@@ -1851,11 +1921,38 @@ def list_examples_by_category(category: str) -> list[ExampleItem]:
     // emits RUN_ERROR as a 'data:' event, so assert it is absent).
     expect(body).not.toContain('RUN_ERROR');
 
+    // A session ID that doesn't derive from the thread ID must be rejected —
+    // it means the request was routed to the wrong AgentCore session.
+    const mismatchRes = await fetch(
+      `http://127.0.0.1:${ports.pyLangchainAgui}/invocations`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          [AGENT_CORE_SESSION_ID_HEADER]: 'some-other-session'.padEnd(33, '0'),
+        },
+        body: JSON.stringify({
+          threadId,
+          runId: 'test-run-mismatch',
+          messages: [
+            { id: 'msg-1', role: 'user', content: 'What is 3 times 5?' },
+          ],
+          state: {},
+          tools: [],
+          context: [],
+          forwardedProps: {},
+        }),
+      },
+    );
+    const mismatchBody = await mismatchRes.text();
+    expect(mismatchRes.status).toBe(200);
+    expect(mismatchBody).toContain('SESSION_ID_MISMATCH');
+
     // Delegate twice on one session id, so the second delegation reuses the A2A
     // client the first built — see the Strands equivalent in the Python HTTP
     // Agent test above for why the second call is the one that matters.
     driveA2ADelegations(llmMock!, 2);
-    const aguiSessionId = `py-langchain-a2a-reuse-${'0'.repeat(20)}`;
+    const delegateThreadId = 'delegate-thread'.padEnd(33, '0');
     for (const attempt of [1, 2]) {
       const delegateRes = await fetch(
         `http://127.0.0.1:${ports.pyLangchainAgui}/invocations`,
@@ -1863,10 +1960,10 @@ def list_examples_by_category(category: str) -> list[ExampleItem]:
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            [AGENT_CORE_SESSION_ID_HEADER]: aguiSessionId,
+            [AGENT_CORE_SESSION_ID_HEADER]: delegateThreadId,
           },
           body: JSON.stringify({
-            threadId: 'delegate-thread',
+            threadId: delegateThreadId,
             runId: `delegate-run-${attempt}`,
             messages: [
               {

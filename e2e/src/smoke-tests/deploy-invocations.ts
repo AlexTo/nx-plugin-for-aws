@@ -274,7 +274,7 @@ export async function invokeAgentCoreAgUiUrl(
         'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id': AGENT_CORE_SESSION_ID,
       },
       body: JSON.stringify({
-        threadId: 'test-thread',
+        threadId: AGENT_CORE_SESSION_ID,
         runId: 'test-run',
         messages: [{ id: 'msg-1', role: 'user', content: message }],
         state: {},

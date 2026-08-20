@@ -1,7 +1,7 @@
 // Chat CLI for <%- agentNameClassName %> (AG-UI protocol). Connects to the local
 // `dev` server, or the deployed agent when `RUNTIME_CONFIG_APP_ID` is set.
 import { AGUIChatAdapter, chatLoop } from 'agent-chat-cli';
-import { createAgentCoreFetch, resolveRemoteAgent } from './agentcore<% if (esm) { %>.js<% } %>';
+import { createAgentCoreFetch, resolveRemoteAgent, SESSION_HEADER } from './agentcore<% if (esm) { %>.js<% } %>';
 
 const remote = await resolveRemoteAgent();
 
@@ -10,8 +10,18 @@ const url = remote
   : process.env.URL!;
 
 // Remote requests are authenticated via a custom fetch; locally the default agent talks plain HTTP.
-const fetchImpl = remote
+const baseFetch = remote
   ? createAgentCoreFetch(<%- auth === 'iam' ? 'remote.region' : '' %>)
-  : undefined;
+  : fetch;
+
+// The agent requires the session ID header to match the request's own thread ID.
+const fetchImpl: typeof fetch = (input, init) => {
+  const headers = new Headers(init?.headers);
+  const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+  if (typeof body?.threadId === 'string') {
+    headers.set(SESSION_HEADER, body.threadId.padEnd(33, '0'));
+  }
+  return baseFetch(input, { ...init, headers });
+};
 
 await chatLoop(new AGUIChatAdapter({ fetch: fetchImpl }), url);
